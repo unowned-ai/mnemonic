@@ -12,6 +12,7 @@ import (
 
 const (
 	// TargetSchemaVersion is the highest schema version this version of the code supports for the memoriesdb component.
+	// This constant is used by the CLI to pass to UpgradeDB.
 	TargetSchemaVersion int64 = 1
 	// MemoriesDBComponent is the name for the main memories database component.
 	MemoriesDBComponent = "memoriesdb"
@@ -41,10 +42,10 @@ func GetComponentSchemaVersion(db *sql.DB, componentName string) (int64, error) 
 	return version, nil
 }
 
-// InitializeSchemaV1 creates the database schema (all tables for memoriesdb)
-// and inserts the current target schema version for the memoriesdb component.
-func InitializeSchemaV1(db *sql.DB) error {
-	// Execute the schema creation SQL
+// InitializeSchema creates the database schema (all tables for memoriesdb)
+// and sets the specified schema version for the memoriesdb component.
+func InitializeSchema(db *sql.DB, schemaVersionToSet int64) error {
+	// Execute the schema creation SQL (SchemaV1 is our only schema definition for now)
 	_, err := db.Exec(SchemaV1)
 	if err != nil {
 		return fmt.Errorf("failed to execute schema v1 SQL: %w", err)
@@ -55,46 +56,37 @@ func InitializeSchemaV1(db *sql.DB) error {
 INSERT INTO mnemonic_versions (component, version) VALUES (?, ?)
 ON CONFLICT(component) DO UPDATE SET version = excluded.version, created_at = unixepoch();`
 
-	_, err = db.Exec(insertVersionSQL, MemoriesDBComponent, TargetSchemaVersion)
+	_, err = db.Exec(insertVersionSQL, MemoriesDBComponent, schemaVersionToSet)
 	if err != nil {
-		return fmt.Errorf("failed to insert/update version for component %s to %d: %w", MemoriesDBComponent, TargetSchemaVersion, err)
+		return fmt.Errorf("failed to insert/update version for component %s to %d: %w", MemoriesDBComponent, schemaVersionToSet, err)
 	}
 
-	fmt.Printf("Component %s initialized/updated to schema version %d\n", MemoriesDBComponent, TargetSchemaVersion)
+	fmt.Printf("Component %s initialized/updated to schema version %d\n", MemoriesDBComponent, schemaVersionToSet)
 	return nil
 }
 
 // UpgradeDB applies necessary migrations to bring the database, represented by the *sql.DB connection,
-// for the MemoriesDBComponent to the current target schema version.
+// for the MemoriesDBComponent to the appTargetSchemaVersion.
 // dbIdentifierForLog is used for logging purposes only.
-func UpgradeDB(db *sql.DB, dbIdentifierForLog string) error {
-	// Ping is removed, assumed to be done by caller if needed.
-	// sql.Open and db.Close() are removed, managed by caller.
-
+func UpgradeDB(db *sql.DB, dbIdentifierForLog string, appTargetSchemaVersion int64) error {
 	currentDBVersion, err := GetComponentSchemaVersion(db, MemoriesDBComponent)
 	if err != nil {
-		// GetComponentSchemaVersion already provides good error context
 		return err
 	}
 
-	// TargetSchemaVersion is defined in this package
-
 	if currentDBVersion == 0 { // 0 indicates component not versioned or new DB
-		fmt.Printf("Component %s in database '%s' appears to be uninitialized or at version 0. Initializing/Upgrading to schema version %d...\n", MemoriesDBComponent, dbIdentifierForLog, TargetSchemaVersion)
-		err = InitializeSchemaV1(db) // This will set up tables and record version for MemoriesDBComponent
+		fmt.Printf("Component %s in database '%s' appears to be uninitialized or at version 0. Initializing/Upgrading to schema version %d...\n", MemoriesDBComponent, dbIdentifierForLog, appTargetSchemaVersion)
+		err = InitializeSchema(db, appTargetSchemaVersion) // Use the appTargetSchemaVersion
 		if err != nil {
 			return fmt.Errorf("failed to initialize component %s in database '%s': %w", MemoriesDBComponent, dbIdentifierForLog, err)
 		}
-		// Success message is printed by InitializeSchemaV1
 		return nil
-	} else if currentDBVersion == TargetSchemaVersion {
+	} else if currentDBVersion == appTargetSchemaVersion {
 		fmt.Printf("Component %s in database '%s' is already up to date (schema version %d).\n", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion)
 		return nil
-	} else if currentDBVersion < TargetSchemaVersion {
-		// This is where migration logic for future versions would go for the MemoriesDBComponent.
-		// For now, we only support initializing to the current version from an uninitialized state (version 0).
-		return fmt.Errorf("component %s in database '%s' has schema version %d, which is older than application's target schema version %d. Automatic migration from this older version is not yet supported", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion, TargetSchemaVersion)
-	} else { // currentDBVersion > TargetSchemaVersion
-		return fmt.Errorf("component %s in database '%s' has schema version %d, which is newer than application's target schema version %d. Please upgrade the application", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion, TargetSchemaVersion)
+	} else if currentDBVersion < appTargetSchemaVersion {
+		return fmt.Errorf("component %s in database '%s' has schema version %d, which is older than application's target schema version %d. Automatic migration from this older version is not yet supported", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion, appTargetSchemaVersion)
+	} else { // currentDBVersion > appTargetSchemaVersion
+		return fmt.Errorf("component %s in database '%s' has schema version %d, which is newer than application's target schema version %d. Please upgrade the application", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion, appTargetSchemaVersion)
 	}
 }

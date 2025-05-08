@@ -100,7 +100,7 @@ var dbUpgradeCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		if err := pkgdb.UpgradeDB(dbConn, dbPath); err != nil {
+		if err := pkgdb.UpgradeDB(dbConn, dbPath, pkgdb.TargetSchemaVersion); err != nil {
 			return err
 		}
 		return nil
