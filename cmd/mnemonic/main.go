@@ -114,7 +114,8 @@ func initCmd() {
 	dbCmd.AddCommand(dbUpgradeCmd)
 	
 	initJournalsCmd()
-	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd)
+	initEntriesCmd()
+	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd, entriesCmd)
 }
 
 func main() {
