@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	mnemonic "github.com/unowned-ai/mnemonic/pkg"
+	pkgdb "github.com/unowned-ai/mnemonic/pkg/db"
 
 	"github.com/spf13/cobra"
 )
@@ -75,8 +76,43 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var dbCmd = &cobra.Command{
+	Use:   "db",
+	Short: "Manage the Mnemonic database",
+	Long:  `Provides commands for managing the Mnemonic SQLite database, including schema upgrades. GIGO.`,
+}
+
+var dbUpgradeCmd = &cobra.Command{
+	Use:   "upgrade [path_to_db_file]",
+	Short: "Upgrade the Mnemonic database schema to the latest version for the memoriesdb component",
+	Long:  `Connects to the SQLite database at the specified path and applies any necessary\nschema migrations to bring the memoriesdb component up to the current application schema version. \nIf the database does not exist or is uninitialized for this component, it will be created \nand initialized with the latest schema for the memoriesdb component.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dbPath := args[0]
+		walEnabled, _ := cmd.Flags().GetBool("wal")
+		syncMode, _ := cmd.Flags().GetString("sync")
+
+		fmt.Printf("Attempting to upgrade memoriesdb component in database at: %s (WAL: %t, Sync: %s)\n", dbPath, walEnabled, syncMode)
+
+		dbConn, err := pkgdb.OpenDBConnection(dbPath, walEnabled, syncMode)
+		if err != nil {
+			return err
+		}
+		defer dbConn.Close()
+
+		if err := pkgdb.UpgradeDB(dbConn, dbPath); err != nil {
+			return err
+		}
+		return nil
+	},
+}
+
 func initCmd() {
-	rootCmd.AddCommand(completionCmd, versionCmd)
+	dbUpgradeCmd.Flags().Bool("wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode.")
+	dbUpgradeCmd.Flags().String("sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA).")
+
+	dbCmd.AddCommand(dbUpgradeCmd)
+	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd)
 }
 
 func main() {
