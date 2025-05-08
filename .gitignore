@@ -43,3 +43,6 @@ go.work
 ### Env ###
 .secrets/
 *.env
+
+
+scratch/
