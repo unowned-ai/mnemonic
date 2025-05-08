@@ -1,0 +1,9 @@
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping"}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_journal","arguments":{"name":"work","description":"Work notes"}}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"create_entry","arguments":{"journal_name":"work","entry_title":"todo-monday","content":"finish the report","tags":"tasks,urgent"}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"list_entries","arguments":{"journal_name":"work"}}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_entry","arguments":{"journal_name":"work","entry_title":"todo-monday"}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"manage_entry_tags","arguments":{"journal_name":"work","entry_title":"todo-monday","add_tags":"office"}}}
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"search_entries","arguments":{"tags":"tasks,office"}}}
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"delete_entry","arguments":{"journal_name":"work","entry_title":"todo-monday"}}}
+{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"delete_journal","arguments":{"name":"work"}}} 
