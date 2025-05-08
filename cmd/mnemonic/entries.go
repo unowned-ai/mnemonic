@@ -13,6 +13,7 @@ import (
 var (
 	journalIDFlag string
 	contentTypeFlag string
+	includeDeletedFlag bool
 )
 
 var entriesCmd = &cobra.Command{
@@ -108,7 +109,7 @@ var listEntriesCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		entries, err := memories.ListEntries(context.Background(), dbConn, journalID)
+		entries, err := memories.ListEntries(context.Background(), dbConn, journalID, includeDeletedFlag)
 		if errors.Is(err, memories.ErrJournalNotFound) {
 			return fmt.Errorf("journal not found: %s", journalIDFlag)
 		}
@@ -122,13 +123,13 @@ var listEntriesCmd = &cobra.Command{
 		}
 
 		fmt.Println("Entries:")
-		fmt.Println("ID | Title | Content Type | Created At | Updated At")
+		fmt.Println("ID | Title | Content Type | Deleted | Created At | Updated At")
 		fmt.Println("------------------------------------------------------------")
 		for _, e := range entries {
 			createdAt := formatTimestamp(e.CreatedAt)
 			updatedAt := formatTimestamp(e.UpdatedAt)
-			fmt.Printf("%s | %s | %s | %s | %s\n", 
-				e.ID, e.Title, e.ContentType, createdAt, updatedAt)
+			fmt.Printf("%s | %s | %s | %t | %s | %s\n", 
+				e.ID, e.Title, e.ContentType, e.Deleted, createdAt, updatedAt)
 		}
 		return nil
 	},
@@ -171,8 +172,8 @@ var updateEntryCmd = &cobra.Command{
 
 var deleteEntryCmd = &cobra.Command{
 	Use:   "delete [entry-id]",
-	Short: "Delete an entry",
-	Long:  `Permanently delete an entry by ID.`,
+	Short: "Soft delete an entry",
+	Long:  `Mark an entry as deleted. The entry will still exist in the database but won't appear in listings unless you use the --include-deleted flag.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		entryIDStr := args[0]
@@ -195,15 +196,15 @@ var deleteEntryCmd = &cobra.Command{
 			return fmt.Errorf("failed to delete entry: %w", err)
 		}
 
-		fmt.Printf("Entry %s deleted successfully!\n", entryIDStr)
+		fmt.Printf("Entry %s marked as deleted.\n", entryIDStr)
 		return nil
 	},
 }
 
-var deleteAllEntriesCmd = &cobra.Command{
-	Use:   "delete-all",
-	Short: "Delete all entries in a journal",
-	Long:  `Permanently delete all entries in a specified journal.`,
+var cleanEntriesCmd = &cobra.Command{
+	Use:   "clean",
+	Short: "Permanently delete soft-deleted entries",
+	Long:  `Permanently delete all entries that have been previously soft-deleted in a journal.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		journalID, err := uuid.Parse(journalIDFlag)
 		if err != nil {
@@ -216,15 +217,15 @@ var deleteAllEntriesCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		count, err := memories.DeleteEntriesByJournal(context.Background(), dbConn, journalID)
+		count, err := memories.CleanDeletedEntries(context.Background(), dbConn, journalID)
 		if errors.Is(err, memories.ErrJournalNotFound) {
 			return fmt.Errorf("journal not found: %s", journalIDFlag)
 		}
 		if err != nil {
-			return fmt.Errorf("failed to delete entries: %w", err)
+			return fmt.Errorf("failed to clean deleted entries: %w", err)
 		}
 
-		fmt.Printf("Deleted %d entries from journal %s.\n", count, journalIDFlag)
+		fmt.Printf("Permanently deleted %d entries from journal %s.\n", count, journalIDFlag)
 		return nil
 	},
 }
@@ -246,14 +247,15 @@ func initEntriesCmd() {
 	createEntryCmd.MarkFlagRequired("journal")
 
 	// List command flags
+	listEntriesCmd.Flags().BoolVar(&includeDeletedFlag, "include-deleted", false, "Include soft-deleted entries in the listing")
 	listEntriesCmd.MarkFlagRequired("journal")
 
 	// Update command flags
 	updateEntryCmd.Flags().String("title", "", "New title for the entry")
 	updateEntryCmd.Flags().String("content", "", "New content for the entry")
 
-	// Delete all entries command flags
-	deleteAllEntriesCmd.MarkFlagRequired("journal")
+	// Clean entries command flags
+	cleanEntriesCmd.MarkFlagRequired("journal")
 
 	// Add all commands to entries command
 	entriesCmd.AddCommand(
@@ -262,7 +264,7 @@ func initEntriesCmd() {
 		listEntriesCmd,
 		updateEntryCmd,
 		deleteEntryCmd,
-		deleteAllEntriesCmd,
+		cleanEntriesCmd,
 	)
 }
 
@@ -275,6 +277,7 @@ func printEntry(entry memories.Entry) {
 	fmt.Printf("Journal ID:   %s\n", entry.JournalID)
 	fmt.Printf("Title:        %s\n", entry.Title)
 	fmt.Printf("Content Type: %s\n", entry.ContentType)
+	fmt.Printf("Deleted:      %t\n", entry.Deleted)
 	fmt.Printf("Created At:   %s\n", createdAt)
 	fmt.Printf("Updated At:   %s\n", updatedAt)
 	fmt.Println("\nContent:")

@@ -14,20 +14,20 @@ var (
 
 const (
 	createEntryStatement = `
-	INSERT INTO entries (id, journal_id, title, content, content_type) 
-	VALUES (?, ?, ?, ?, ?)
+	INSERT INTO entries (id, journal_id, title, content, content_type, deleted) 
+	VALUES (?, ?, ?, ?, ?, ?)
 	`
 
 	getEntryStatement = `
-	SELECT id, journal_id, title, content, content_type, created_at, updated_at 
+	SELECT id, journal_id, title, content, content_type, deleted, created_at, updated_at 
 	FROM entries 
 	WHERE id = ?
 	`
 
 	listEntriesStatement = `
-	SELECT id, journal_id, title, content, content_type, created_at, updated_at 
+	SELECT id, journal_id, title, content, content_type, deleted, created_at, updated_at 
 	FROM entries
-	WHERE journal_id = ?
+	WHERE journal_id = ? AND (deleted = ? OR ? = true)
 	ORDER BY updated_at DESC
 	`
 
@@ -37,9 +37,15 @@ const (
 	WHERE id = ?
 	`
 
-	deleteEntryStatement = `
-	DELETE FROM entries 
+	softDeleteEntryStatement = `
+	UPDATE entries 
+	SET deleted = TRUE, updated_at = unixepoch()
 	WHERE id = ?
+	`
+
+	cleanDeletedEntriesStatement = `
+	DELETE FROM entries 
+	WHERE journal_id = ? AND deleted = TRUE
 	`
 
 	deleteEntriesByJournalStatement = `
@@ -47,6 +53,7 @@ const (
 	WHERE journal_id = ?
 	`
 )
+
 
 func CreateEntry(ctx context.Context, db *sql.DB, journalID uuid.UUID, title, content, contentType string) (Entry, error) {
 	entryID := uuid.New()
@@ -65,6 +72,9 @@ func CreateEntry(ctx context.Context, db *sql.DB, journalID uuid.UUID, title, co
 		contentType = "text/plain"
 	}
 
+	// Initialize the deleted flag to false
+	deleted := false
+
 	_, err = db.ExecContext(
 		ctx,
 		createEntryStatement,
@@ -73,6 +83,7 @@ func CreateEntry(ctx context.Context, db *sql.DB, journalID uuid.UUID, title, co
 		title,
 		content,
 		contentType,
+		deleted,
 	)
 	if err != nil {
 		return Entry{}, err
@@ -91,6 +102,7 @@ func GetEntry(ctx context.Context, db *sql.DB, id uuid.UUID) (Entry, error) {
 		&entry.Title,
 		&entry.Content,
 		&entry.ContentType,
+		&entry.Deleted,
 		&entry.CreatedAt,
 		&entry.UpdatedAt,
 	)
@@ -105,7 +117,7 @@ func GetEntry(ctx context.Context, db *sql.DB, id uuid.UUID) (Entry, error) {
 }
 
 // TODO: Add pagination support
-func ListEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID) ([]Entry, error) {
+func ListEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID, includeDeleted bool) ([]Entry, error) {
 	// First check if the journal exists
 	_, err := GetJournal(ctx, db, journalID)
 	if err != nil {
@@ -115,7 +127,7 @@ func ListEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID) ([]Entry,
 		return nil, err
 	}
 
-	rows, err := db.QueryContext(ctx, listEntriesStatement, journalID)
+	rows, err := db.QueryContext(ctx, listEntriesStatement, journalID, false, includeDeleted)
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +143,7 @@ func ListEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID) ([]Entry,
 			&entry.Title,
 			&entry.Content,
 			&entry.ContentType,
+			&entry.Deleted,
 			&entry.CreatedAt,
 			&entry.UpdatedAt,
 		)
@@ -192,7 +205,14 @@ func UpdateEntry(ctx context.Context, db *sql.DB, id uuid.UUID, title, content, 
 }
 
 func DeleteEntry(ctx context.Context, db *sql.DB, id uuid.UUID) error {
-	res, err := db.ExecContext(ctx, deleteEntryStatement, id)
+	// First check if the entry exists
+	_, err := GetEntry(ctx, db, id)
+	if err != nil {
+		return err
+	}
+
+	// Soft delete by setting the deleted flag to true
+	res, err := db.ExecContext(ctx, softDeleteEntryStatement, id)
 	if err != nil {
 		return err
 	}
@@ -217,6 +237,22 @@ func DeleteEntriesByJournal(ctx context.Context, db *sql.DB, journalID uuid.UUID
 	}
 
 	res, err := db.ExecContext(ctx, deleteEntriesByJournalStatement, journalID)
+	if err != nil {
+		return 0, err
+	}
+
+	return res.RowsAffected()
+}
+
+func CleanDeletedEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID) (int64, error) {
+	// First check if the journal exists
+	_, err := GetJournal(ctx, db, journalID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Permanently delete all entries that are marked as deleted
+	res, err := db.ExecContext(ctx, cleanDeletedEntriesStatement, journalID)
 	if err != nil {
 		return 0, err
 	}

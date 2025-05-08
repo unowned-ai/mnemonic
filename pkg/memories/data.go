@@ -19,6 +19,7 @@ type Entry struct {
 	Title       string    `json:"title"`
 	Content     string    `json:"content"`
 	ContentType string    `json:"content_type"`
+	Deleted     bool      `json:"deleted"`
 	CreatedAt   float64   `json:"created_at"`
 	UpdatedAt   float64   `json:"updated_at"`
 }

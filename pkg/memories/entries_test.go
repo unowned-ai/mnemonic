@@ -190,7 +190,7 @@ func TestListEntries(t *testing.T) {
 	}
 
 	// Test listing entries for the first journal
-	entriesForJournal1, err := ListEntries(ctx, testDB, journalID)
+	entriesForJournal1, err := ListEntries(ctx, testDB, journalID, false)
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestListEntries(t *testing.T) {
 	}
 
 	// Test listing entries for the second journal
-	entriesForJournal2, err := ListEntries(ctx, testDB, secondJournal.ID)
+	entriesForJournal2, err := ListEntries(ctx, testDB, secondJournal.ID, false)
 	if err != nil {
 		t.Fatalf("ListEntries failed: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestListEntries(t *testing.T) {
 
 	// Test listing entries for a non-existent journal
 	nonExistentJournalID := uuid.New()
-	_, err = ListEntries(ctx, testDB, nonExistentJournalID)
+	_, err = ListEntries(ctx, testDB, nonExistentJournalID, false)
 	if err != ErrJournalNotFound {
 		t.Errorf("Expected ErrJournalNotFound for non-existent journal, got: %v", err)
 	}
@@ -326,6 +326,87 @@ func TestUpdateEntry(t *testing.T) {
 	}
 }
 
+func TestSoftDeleteAndCleanEntries(t *testing.T) {
+	testDB, journalID := setupTestDBWithJournal(t)
+	defer testDB.Close()
+
+	ctx := context.Background()
+	
+	// Create entries to test with
+	entry1, err := CreateEntry(ctx, testDB, journalID, "Entry 1", "Content 1", "text/plain")
+	if err != nil {
+		t.Fatalf("Failed to create test entry 1: %v", err)
+	}
+
+	// Create a second entry that will remain active
+	_, err = CreateEntry(ctx, testDB, journalID, "Entry 2", "Content 2", "text/plain")
+	if err != nil {
+		t.Fatalf("Failed to create test entry 2: %v", err)
+	}
+
+	// Soft delete the first entry
+	err = DeleteEntry(ctx, testDB, entry1.ID)
+	if err != nil {
+		t.Fatalf("DeleteEntry failed: %v", err)
+	}
+
+	// Verify the entry is marked as deleted but still retrievable
+	deletedEntry, err := GetEntry(ctx, testDB, entry1.ID)
+	if err != nil {
+		t.Fatalf("Failed to get soft-deleted entry: %v", err)
+	}
+
+	if !deletedEntry.Deleted {
+		t.Errorf("Expected entry to be marked as deleted, but got Deleted = false")
+	}
+
+	// Test listing entries excluding deleted (default)
+	activeEntries, err := ListEntries(ctx, testDB, journalID, false)
+	if err != nil {
+		t.Fatalf("ListEntries failed: %v", err)
+	}
+
+	if len(activeEntries) != 1 {
+		t.Errorf("Expected 1 active entry, got %d", len(activeEntries))
+	}
+
+	// Test listing all entries including deleted
+	allEntries, err := ListEntries(ctx, testDB, journalID, true)
+	if err != nil {
+		t.Fatalf("ListEntries with includeDeleted=true failed: %v", err)
+	}
+
+	if len(allEntries) != 2 {
+		t.Errorf("Expected 2 total entries when including deleted, got %d", len(allEntries))
+	}
+
+	// Clean deleted entries
+	cleanedCount, err := CleanDeletedEntries(ctx, testDB, journalID)
+	if err != nil {
+		t.Fatalf("CleanDeletedEntries failed: %v", err)
+	}
+
+	if cleanedCount != 1 {
+		t.Errorf("Expected to clean 1 deleted entry, cleaned %d", cleanedCount)
+	}
+
+	// Verify the cleaned entry is permanently deleted
+	_, err = GetEntry(ctx, testDB, entry1.ID)
+	if err != ErrEntryNotFound {
+		t.Errorf("Expected ErrEntryNotFound for permanently deleted entry, got: %v", err)
+	}
+
+	// Test listing all entries after cleaning
+	entriesAfterClean, err := ListEntries(ctx, testDB, journalID, true)
+	if err != nil {
+		t.Fatalf("ListEntries after clean failed: %v", err)
+	}
+
+	if len(entriesAfterClean) != 1 {
+		t.Errorf("Expected 1 entry after cleaning, got %d", len(entriesAfterClean))
+	}
+}
+
 func TestDeleteEntry(t *testing.T) {
 	testDB, journalID := setupTestDBWithJournal(t)
 	defer testDB.Close()
@@ -338,16 +419,20 @@ func TestDeleteEntry(t *testing.T) {
 		t.Fatalf("Failed to create test entry: %v", err)
 	}
 
-	// Delete the entry
+	// Soft delete the entry
 	err = DeleteEntry(ctx, testDB, entry.ID)
 	if err != nil {
 		t.Fatalf("DeleteEntry failed: %v", err)
 	}
 
-	// Verify the entry is deleted
-	_, err = GetEntry(ctx, testDB, entry.ID)
-	if err != ErrEntryNotFound {
-		t.Errorf("Expected ErrEntryNotFound for deleted entry, got: %v", err)
+	// Verify the entry is marked as deleted but still retrievable
+	deletedEntry, err := GetEntry(ctx, testDB, entry.ID)
+	if err != nil {
+		t.Fatalf("Failed to get soft-deleted entry: %v", err)
+	}
+
+	if !deletedEntry.Deleted {
+		t.Errorf("Expected entry to be marked as deleted, but got Deleted = false")
 	}
 
 	// Test deleting non-existent entry
@@ -398,7 +483,7 @@ func TestDeleteEntriesByJournal(t *testing.T) {
 	}
 
 	// Verify entries for the first journal are deleted
-	entriesForJournal1, err := ListEntries(ctx, testDB, journalID)
+	entriesForJournal1, err := ListEntries(ctx, testDB, journalID, false)
 	if err != nil {
 		t.Fatalf("ListEntries failed after deletion: %v", err)
 	}
@@ -408,7 +493,7 @@ func TestDeleteEntriesByJournal(t *testing.T) {
 	}
 
 	// Verify entries for the second journal still exist
-	entriesForJournal2, err := ListEntries(ctx, testDB, secondJournal.ID)
+	entriesForJournal2, err := ListEntries(ctx, testDB, secondJournal.ID, false)
 	if err != nil {
 		t.Fatalf("ListEntries failed for journal 2: %v", err)
 	}
