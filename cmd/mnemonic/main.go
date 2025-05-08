@@ -5,14 +5,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/unowned-ai/mnemonic/pkg"
+	mnemonic "github.com/unowned-ai/mnemonic/pkg"
 
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
 	Use:     "mnemonic",
-	Short:   "",
+	Short:   "A self-hostable datastore for your memories to share with your AI models.",
 	Long:    ``,
 	Version: fmt.Sprintf("v%s", mnemonic.Version),
 	Run: func(cmd *cobra.Command, args []string) {
