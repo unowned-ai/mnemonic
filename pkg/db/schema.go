@@ -5,7 +5,7 @@ const (
 	// This schema pertains to the 'memoriesdb' component.
 	SchemaV1 = `
 CREATE TABLE IF NOT EXISTS mnemonic_versions (
-    component TEXT PRIMARY KEY,
+    component VARCHAR(64) PRIMARY KEY,
     version INTEGER NOT NULL,
     created_at REAL DEFAULT (unixepoch())
 );
