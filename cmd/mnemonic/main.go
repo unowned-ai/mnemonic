@@ -112,7 +112,9 @@ func initCmd() {
 	dbUpgradeCmd.Flags().String("sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA).")
 
 	dbCmd.AddCommand(dbUpgradeCmd)
-	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd)
+	
+	initJournalsCmd()
+	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd)
 }
 
 func main() {
