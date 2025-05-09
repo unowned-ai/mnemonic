@@ -57,7 +57,3 @@ Example:
 		return srv.Start()
 	},
 }
-
-func initMcpCmd() {
-	rootCmd.AddCommand(mcpCmd)
-}
