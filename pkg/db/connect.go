@@ -57,5 +57,13 @@ func OpenDBConnection(baseDSN string, enableWAL bool, syncPragma string) (*sql.D
 		return nil, fmt.Errorf("failed to ping database with DSN '%s': %w", constructedDSN, err)
 	}
 
+	// Enable foreign key support for this connection.
+	// This is crucial for ON DELETE CASCADE and other FK actions to work.
+	_, err = db.Exec("PRAGMA foreign_keys = ON;")
+	if err != nil {
+		db.Close() // Close DB if we can't set the pragma
+		return nil, fmt.Errorf("failed to enable foreign key support for DSN '%s': %w", constructedDSN, err)
+	}
+
 	return db, nil
 }
