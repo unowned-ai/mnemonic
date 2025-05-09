@@ -393,12 +393,14 @@ var untagEntryCmd = &cobra.Command{
 }
 
 func initEntriesCmd() {
-	entriesCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
-	entriesCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
-	entriesCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
+	// entriesCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)") // Inherited from rootCmd
+	// entriesCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode") // Inherited from rootCmd
+	// entriesCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)") // Inherited from rootCmd
+	// entriesCmd.MarkPersistentFlagRequired("db") // Handled by openDB check or specific command needs
+
 	entriesCmd.PersistentFlags().StringVar(&journalIDFlag, "journal", "", "Journal ID (required for most commands)")
 	entriesCmd.PersistentFlags().StringVar(&contentTypeFlag, "content-type", "", "Content type (e.g., text/plain, text/markdown)")
-	entriesCmd.MarkPersistentFlagRequired("db")
+	// entriesCmd.MarkPersistentFlagRequired("db") // This was already commented/removed implicitly
 
 	createEntryCmd.Flags().String("title", "", "Title of the entry (required)")
 	createEntryCmd.Flags().String("content", "", "Content of the entry (required)")

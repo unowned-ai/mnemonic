@@ -223,10 +223,10 @@ var cleanJournalsCmd = &cobra.Command{
 }
 
 func initJournalsCmd() {
-	journalsCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
-	journalsCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
-	journalsCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
-	journalsCmd.MarkPersistentFlagRequired("db")
+	// journalsCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)") // Inherited from rootCmd
+	// journalsCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode") // Inherited from rootCmd
+	// journalsCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)") // Inherited from rootCmd
+	// journalsCmd.MarkPersistentFlagRequired("db") // Should be handled by individual commands or openDB() check
 
 	createJournalCmd.Flags().String("name", "", "Name of the journal (required)")
 	createJournalCmd.Flags().String("description", "", "Description of the journal")
