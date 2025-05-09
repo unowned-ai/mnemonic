@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -268,7 +267,4 @@ func printJournal(journal memories.Journal) {
 	fmt.Printf("Updated At:  %s\n", updatedAt)
 }
 
-func formatTimestamp(timestamp float64) string {
-	timeObj := time.Unix(int64(timestamp), 0)
-	return timeObj.Format(time.RFC3339)
-}
+// formatTimestamp function will be moved to utils.go

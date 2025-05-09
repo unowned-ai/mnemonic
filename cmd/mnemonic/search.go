@@ -12,6 +12,7 @@ import (
 )
 
 var searchCmdJournalIDFlag string
+var searchCmdTopNFlag int // Variable for the --top flag
 
 var searchCmd = &cobra.Command{
 	Use:   "search [tag1 tag2...]",
@@ -46,18 +47,40 @@ var searchCmd = &cobra.Command{
 			return fmt.Errorf("search failed: %w", err)
 		}
 
+		if searchCmdTopNFlag > 0 && searchCmdTopNFlag < len(results) {
+			results = results[:searchCmdTopNFlag]
+		}
+
 		if len(results) == 0 {
 			fmt.Println("No matching entries found.")
 			return nil
 		}
 
-		fmt.Println("Matches | ID                                   | Title")
-		fmt.Println("-----------------------------------------------------------------------") // Adjusted separator length
-		for _, matchedEntry := range results {
-			fmt.Printf("%-7d | %-36s | %s\n",
-				matchedEntry.MatchCount,
-				matchedEntry.Entry.ID.String(),
-				matchedEntry.Entry.Title)
+		fmt.Printf("Found %d matching entries (displaying top %d):\n", len(results), searchCmdTopNFlag)
+		if searchCmdTopNFlag == 0 { // If top was 0, we are displaying all results found
+			fmt.Printf("Found %d matching entries (displaying all):\n", len(results))
+		} else {
+			fmt.Printf("Found %d matching entries (displaying top %d):\n", len(results), searchCmdTopNFlag)
+			if searchCmdTopNFlag > len(results) {
+				// If topN is greater than actual results, clarify we are showing all actual results.
+				fmt.Printf("(Requested top %d, but only %d found)\n", searchCmdTopNFlag, len(results))
+			}
+		}
+
+		for i, matchedEntry := range results {
+			fmt.Printf("\n--- Entry %d ---\n", i+1)
+			fmt.Printf("Match Count:  %d\n", matchedEntry.MatchCount)
+			fmt.Printf("ID:           %s\n", matchedEntry.Entry.ID.String())
+			fmt.Printf("Journal ID:   %s\n", matchedEntry.Entry.JournalID.String())
+			fmt.Printf("Title:        %s\n", matchedEntry.Entry.Title)
+			fmt.Printf("Content Type: %s\n", matchedEntry.Entry.ContentType)
+			fmt.Printf("Deleted:      %t\n", matchedEntry.Entry.Deleted)
+			fmt.Printf("Created At:   %s\n", formatTimestamp(matchedEntry.Entry.CreatedAt)) // Assumes formatTimestamp is accessible
+			fmt.Printf("Updated At:   %s\n", formatTimestamp(matchedEntry.Entry.UpdatedAt)) // Assumes formatTimestamp is accessible
+			fmt.Println("Content:")
+			fmt.Println("-----------------------------------------------------------------------")
+			fmt.Println(matchedEntry.Entry.Content)
+			fmt.Println("-----------------------------------------------------------------------")
 		}
 
 		return nil
@@ -72,6 +95,7 @@ func initSearchCmd() {
 		fmt.Fprintf(os.Stderr, "Error marking --journal flag required for search: %v\n", err)
 		// os.Exit(1) // Or handle more gracefully depending on desired startup behavior
 	}
+	searchCmd.Flags().IntVar(&searchCmdTopNFlag, "top", 0, "Return only the top N results (0 means all)")
 	// No dbPath, walMode, syncMode flags here as they are persistent flags on a parent command (e.g. root or journalsCmd)
 	// and use the package-level variables from journals.go or main.go
 }
