@@ -54,7 +54,6 @@ const (
 	`
 )
 
-
 func CreateEntry(ctx context.Context, db *sql.DB, journalID uuid.UUID, title, content, contentType string) (Entry, error) {
 	entryID := uuid.New()
 
@@ -93,6 +92,7 @@ func CreateEntry(ctx context.Context, db *sql.DB, journalID uuid.UUID, title, co
 	return GetEntry(ctx, db, entryID)
 }
 
+// GetEntry retrieves an entry using a database connection.
 func GetEntry(ctx context.Context, db *sql.DB, id uuid.UUID) (Entry, error) {
 	var entry Entry
 
@@ -161,6 +161,7 @@ func ListEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID, includeDe
 	return entries, nil
 }
 
+// UpdateEntry now accepts *sql.DB again
 func UpdateEntry(ctx context.Context, db *sql.DB, id uuid.UUID, title, content, contentType string) (Entry, error) {
 	// First check if the entry exists
 	existingEntry, err := GetEntry(ctx, db, id)
@@ -204,6 +205,7 @@ func UpdateEntry(ctx context.Context, db *sql.DB, id uuid.UUID, title, content, 
 	return GetEntry(ctx, db, id)
 }
 
+// DeleteEntry now accepts *sql.DB again
 func DeleteEntry(ctx context.Context, db *sql.DB, id uuid.UUID) error {
 	// First check if the entry exists
 	_, err := GetEntry(ctx, db, id)
@@ -229,6 +231,7 @@ func DeleteEntry(ctx context.Context, db *sql.DB, id uuid.UUID) error {
 	return nil
 }
 
+// DeleteEntriesByJournal now accepts *sql.DB again
 func DeleteEntriesByJournal(ctx context.Context, db *sql.DB, journalID uuid.UUID) (int64, error) {
 	// First check if the journal exists
 	_, err := GetJournal(ctx, db, journalID)
@@ -244,6 +247,7 @@ func DeleteEntriesByJournal(ctx context.Context, db *sql.DB, journalID uuid.UUID
 	return res.RowsAffected()
 }
 
+// CleanDeletedEntries now accepts *sql.DB again
 func CleanDeletedEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID) (int64, error) {
 	// First check if the journal exists
 	_, err := GetJournal(ctx, db, journalID)

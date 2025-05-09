@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	journalIDFlag string
-	contentTypeFlag string
+	journalIDFlag      string
+	contentTypeFlag    string
 	includeDeletedFlag bool
-	showTagsFlag bool
+	showTagsFlag       bool
 )
 
 var entriesCmd = &cobra.Command{
@@ -36,6 +36,7 @@ var createEntryCmd = &cobra.Command{
 
 		title, _ := cmd.Flags().GetString("title")
 		content, _ := cmd.Flags().GetString("content")
+		tagsStr, _ := cmd.Flags().GetString("tags")
 
 		if title == "" {
 			return errors.New("entry title is required")
@@ -45,13 +46,29 @@ var createEntryCmd = &cobra.Command{
 			return errors.New("entry content is required")
 		}
 
+		var tagNames []string
+		if tagsStr != "" {
+			tagNames = strings.Split(tagsStr, ",")
+			for i, tag := range tagNames {
+				tagNames[i] = strings.TrimSpace(tag)
+			}
+			actualTags := []string{}
+			for _, tag := range tagNames {
+				if tag != "" {
+					actualTags = append(actualTags, tag)
+				}
+			}
+			tagNames = actualTags
+		}
+
 		dbConn, err := openDB()
 		if err != nil {
 			return err
 		}
 		defer dbConn.Close()
 
-		entry, err := memories.CreateEntry(context.Background(), dbConn, journalID, title, content, contentTypeFlag)
+		// Step 1: Create the entry
+		entry, err := memories.CreateEntry(cmd.Context(), dbConn, journalID, title, content, contentTypeFlag)
 		if errors.Is(err, memories.ErrJournalNotFound) {
 			return fmt.Errorf("journal not found: %s", journalIDFlag)
 		}
@@ -59,7 +76,28 @@ var createEntryCmd = &cobra.Command{
 			return fmt.Errorf("failed to create entry: %w", err)
 		}
 
-		printEntry(entry, nil)
+		// Step 2: Tag the entry if tags were provided
+		var lastTaggingError error
+		for _, tagName := range tagNames {
+			err = memories.TagEntry(cmd.Context(), dbConn, entry.ID, tagName)
+			if err != nil {
+				// Collect last error, but continue trying to apply other tags
+				lastTaggingError = fmt.Errorf("failed to apply tag '%s': %w", tagName, err)
+				cmd.PrintErrln(lastTaggingError) // Print error for each failed tag
+			}
+		}
+
+		// Fetch tags to display them
+		createdEntryTags, listTagsErr := memories.ListTagsForEntry(cmd.Context(), dbConn, entry.ID)
+		if listTagsErr != nil {
+			cmd.PrintErrf("Failed to retrieve tags for new entry: %v\n", listTagsErr)
+		}
+		printEntry(entry, createdEntryTags)
+
+		// Return the last tagging error if any occurred, so CLI indicates partial failure
+		if lastTaggingError != nil {
+			return fmt.Errorf("entry created, but some tags failed to apply: %w", lastTaggingError)
+		}
 		return nil
 	},
 }
@@ -133,21 +171,21 @@ var listEntriesCmd = &cobra.Command{
 		}
 
 		fmt.Println("Entries:")
-		
+
 		if showTagsFlag {
 			fmt.Println("ID | Title | Content Type | Deleted | Tags | Created At | Updated At")
 			fmt.Println("------------------------------------------------------------")
 			for _, e := range entries {
 				createdAt := formatTimestamp(e.CreatedAt)
 				updatedAt := formatTimestamp(e.UpdatedAt)
-				
+
 				// Get tags for this entry
 				tags, err := memories.ListTagsForEntry(context.Background(), dbConn, e.ID)
 				if err != nil {
 					return fmt.Errorf("failed to get tags for entry %s: %w", e.ID, err)
 				}
-				
-				fmt.Printf("%s | %s | %s | %t | %s | %s | %s\n", 
+
+				fmt.Printf("%s | %s | %s | %t | %s | %s | %s\n",
 					e.ID, e.Title, e.ContentType, e.Deleted, formatTagsList(tags), createdAt, updatedAt)
 			}
 		} else {
@@ -156,7 +194,7 @@ var listEntriesCmd = &cobra.Command{
 			for _, e := range entries {
 				createdAt := formatTimestamp(e.CreatedAt)
 				updatedAt := formatTimestamp(e.UpdatedAt)
-				fmt.Printf("%s | %s | %s | %t | %s | %s\n", 
+				fmt.Printf("%s | %s | %s | %t | %s | %s\n",
 					e.ID, e.Title, e.ContentType, e.Deleted, createdAt, updatedAt)
 			}
 		}
@@ -185,7 +223,8 @@ var updateEntryCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		entry, err := memories.UpdateEntry(context.Background(), dbConn, entryID, title, content, contentTypeFlag)
+		// Revert: No explicit transaction needed here for UpdateEntry as it now takes *sql.DB
+		entry, err := memories.UpdateEntry(cmd.Context(), dbConn, entryID, title, content, contentTypeFlag)
 		if errors.Is(err, memories.ErrEntryNotFound) {
 			return fmt.Errorf("entry not found: %s", entryIDStr)
 		}
@@ -194,7 +233,12 @@ var updateEntryCmd = &cobra.Command{
 		}
 
 		fmt.Println("Entry updated successfully!")
-		printEntry(entry, nil)
+		var updatedEntryTags []memories.Tag
+		updatedEntryTags, err = memories.ListTagsForEntry(cmd.Context(), dbConn, entry.ID)
+		if err != nil {
+			cmd.PrintErrf("Failed to retrieve tags for updated entry: %v\n", err)
+		}
+		printEntry(entry, updatedEntryTags)
 		return nil
 	},
 }
@@ -217,7 +261,8 @@ var deleteEntryCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		err = memories.DeleteEntry(context.Background(), dbConn, entryID)
+		// Revert: No explicit transaction needed here for DeleteEntry
+		err = memories.DeleteEntry(cmd.Context(), dbConn, entryID)
 		if errors.Is(err, memories.ErrEntryNotFound) {
 			return fmt.Errorf("entry not found: %s", entryIDStr)
 		}
@@ -246,7 +291,8 @@ var cleanEntriesCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		count, err := memories.CleanDeletedEntries(context.Background(), dbConn, journalID)
+		// Revert: No explicit transaction needed here for CleanDeletedEntries
+		count, err := memories.CleanDeletedEntries(cmd.Context(), dbConn, journalID)
 		if errors.Is(err, memories.ErrJournalNotFound) {
 			return fmt.Errorf("journal not found: %s", journalIDFlag)
 		}
@@ -366,6 +412,7 @@ func initEntriesCmd() {
 	// Create command flags
 	createEntryCmd.Flags().String("title", "", "Title of the entry (required)")
 	createEntryCmd.Flags().String("content", "", "Content of the entry (required)")
+	createEntryCmd.Flags().String("tags", "", "Comma-separated list of tags for the entry")
 	createEntryCmd.MarkFlagRequired("title")
 	createEntryCmd.MarkFlagRequired("content")
 	createEntryCmd.MarkFlagRequired("journal")
@@ -408,11 +455,11 @@ func printEntry(entry memories.Entry, tags []memories.Tag) {
 	fmt.Printf("Title:        %s\n", entry.Title)
 	fmt.Printf("Content Type: %s\n", entry.ContentType)
 	fmt.Printf("Deleted:      %t\n", entry.Deleted)
-	
+
 	if len(tags) > 0 {
 		fmt.Printf("Tags:         %s\n", formatTagsList(tags))
 	}
-	
+
 	fmt.Printf("Created At:   %s\n", createdAt)
 	fmt.Printf("Updated At:   %s\n", updatedAt)
 	fmt.Println("\nContent:")
