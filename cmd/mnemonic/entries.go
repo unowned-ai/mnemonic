@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ var (
 	journalIDFlag string
 	contentTypeFlag string
 	includeDeletedFlag bool
+	showTagsFlag bool
 )
 
 var entriesCmd = &cobra.Command{
@@ -57,7 +59,7 @@ var createEntryCmd = &cobra.Command{
 			return fmt.Errorf("failed to create entry: %w", err)
 		}
 
-		printEntry(entry)
+		printEntry(entry, nil)
 		return nil
 	},
 }
@@ -88,7 +90,15 @@ var getEntryCmd = &cobra.Command{
 			return fmt.Errorf("failed to get entry: %w", err)
 		}
 
-		printEntry(entry)
+		var tags []memories.Tag
+		if showTagsFlag {
+			tags, err = memories.ListTagsForEntry(context.Background(), dbConn, entry.ID)
+			if err != nil {
+				return fmt.Errorf("failed to get tags for entry: %w", err)
+			}
+		}
+
+		printEntry(entry, tags)
 		return nil
 	},
 }
@@ -123,13 +133,32 @@ var listEntriesCmd = &cobra.Command{
 		}
 
 		fmt.Println("Entries:")
-		fmt.Println("ID | Title | Content Type | Deleted | Created At | Updated At")
-		fmt.Println("------------------------------------------------------------")
-		for _, e := range entries {
-			createdAt := formatTimestamp(e.CreatedAt)
-			updatedAt := formatTimestamp(e.UpdatedAt)
-			fmt.Printf("%s | %s | %s | %t | %s | %s\n", 
-				e.ID, e.Title, e.ContentType, e.Deleted, createdAt, updatedAt)
+		
+		if showTagsFlag {
+			fmt.Println("ID | Title | Content Type | Deleted | Tags | Created At | Updated At")
+			fmt.Println("------------------------------------------------------------")
+			for _, e := range entries {
+				createdAt := formatTimestamp(e.CreatedAt)
+				updatedAt := formatTimestamp(e.UpdatedAt)
+				
+				// Get tags for this entry
+				tags, err := memories.ListTagsForEntry(context.Background(), dbConn, e.ID)
+				if err != nil {
+					return fmt.Errorf("failed to get tags for entry %s: %w", e.ID, err)
+				}
+				
+				fmt.Printf("%s | %s | %s | %t | %s | %s | %s\n", 
+					e.ID, e.Title, e.ContentType, e.Deleted, formatTagsList(tags), createdAt, updatedAt)
+			}
+		} else {
+			fmt.Println("ID | Title | Content Type | Deleted | Created At | Updated At")
+			fmt.Println("------------------------------------------------------------")
+			for _, e := range entries {
+				createdAt := formatTimestamp(e.CreatedAt)
+				updatedAt := formatTimestamp(e.UpdatedAt)
+				fmt.Printf("%s | %s | %s | %t | %s | %s\n", 
+					e.ID, e.Title, e.ContentType, e.Deleted, createdAt, updatedAt)
+			}
 		}
 		return nil
 	},
@@ -165,7 +194,7 @@ var updateEntryCmd = &cobra.Command{
 		}
 
 		fmt.Println("Entry updated successfully!")
-		printEntry(entry)
+		printEntry(entry, nil)
 		return nil
 	},
 }
@@ -230,6 +259,101 @@ var cleanEntriesCmd = &cobra.Command{
 	},
 }
 
+var tagEntryCmd = &cobra.Command{
+	Use:   "tag [entry-id] [tag]...",
+	Short: "Tag an entry",
+	Long:  `Add one or more tags to an entry. Creates the tag if it doesn't exist.`,
+	Args:  cobra.MinimumNArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		entryIDStr := args[0]
+		entryID, err := uuid.Parse(entryIDStr)
+		if err != nil {
+			return fmt.Errorf("invalid entry ID: %w", err)
+		}
+
+		tags := args[1:]
+
+		dbConn, err := openDB()
+		if err != nil {
+			return err
+		}
+		defer dbConn.Close()
+
+		for _, tag := range tags {
+			err = memories.TagEntry(context.Background(), dbConn, entryID, tag)
+			if errors.Is(err, memories.ErrEntryNotFound) {
+				return fmt.Errorf("entry not found: %s", entryIDStr)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to tag entry with '%s': %w", tag, err)
+			}
+		}
+
+		fmt.Printf("Entry %s tagged with: %s\n", entryIDStr, strings.Join(tags, ", "))
+		return nil
+	},
+}
+
+var untagEntryCmd = &cobra.Command{
+	Use:   "untag [entry-id] [tag]...",
+	Short: "Remove tags from an entry",
+	Long:  `Remove one or more tags from an entry.`,
+	Args:  cobra.MinimumNArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		entryIDStr := args[0]
+		entryID, err := uuid.Parse(entryIDStr)
+		if err != nil {
+			return fmt.Errorf("invalid entry ID: %w", err)
+		}
+
+		tags := args[1:]
+
+		dbConn, err := openDB()
+		if err != nil {
+			return err
+		}
+		defer dbConn.Close()
+
+		var failedTags []string
+		for _, tag := range tags {
+			err = memories.DetachTag(context.Background(), dbConn, entryID, tag)
+			if errors.Is(err, memories.ErrTagNotFound) {
+				failedTags = append(failedTags, tag)
+				continue
+			}
+			if errors.Is(err, memories.ErrEntryNotFound) {
+				return fmt.Errorf("entry not found: %s", entryIDStr)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to remove tag '%s': %w", tag, err)
+			}
+		}
+
+		if len(failedTags) == 0 {
+			fmt.Printf("Tags removed from entry %s: %s\n", entryIDStr, strings.Join(tags, ", "))
+		} else {
+			fmt.Printf("Some tags were not found on entry %s: %s\n", entryIDStr, strings.Join(failedTags, ", "))
+			if len(failedTags) < len(tags) {
+				successTags := make([]string, 0, len(tags)-len(failedTags))
+				for _, tag := range tags {
+					found := false
+					for _, failedTag := range failedTags {
+						if tag == failedTag {
+							found = true
+							break
+						}
+					}
+					if !found {
+						successTags = append(successTags, tag)
+					}
+				}
+				fmt.Printf("Successfully removed tags: %s\n", strings.Join(successTags, ", "))
+			}
+		}
+		return nil
+	},
+}
+
 func initEntriesCmd() {
 	// Common flags for entries commands
 	entriesCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
@@ -246,8 +370,12 @@ func initEntriesCmd() {
 	createEntryCmd.MarkFlagRequired("content")
 	createEntryCmd.MarkFlagRequired("journal")
 
+	// Get command flags
+	getEntryCmd.Flags().BoolVar(&showTagsFlag, "tags", false, "Show tags for the entry")
+
 	// List command flags
 	listEntriesCmd.Flags().BoolVar(&includeDeletedFlag, "include-deleted", false, "Include soft-deleted entries in the listing")
+	listEntriesCmd.Flags().BoolVar(&showTagsFlag, "tags", false, "Show tags for each entry")
 	listEntriesCmd.MarkFlagRequired("journal")
 
 	// Update command flags
@@ -265,10 +393,12 @@ func initEntriesCmd() {
 		updateEntryCmd,
 		deleteEntryCmd,
 		cleanEntriesCmd,
+		tagEntryCmd,
+		untagEntryCmd,
 	)
 }
 
-func printEntry(entry memories.Entry) {
+func printEntry(entry memories.Entry, tags []memories.Tag) {
 	createdAt := formatTimestamp(entry.CreatedAt)
 	updatedAt := formatTimestamp(entry.UpdatedAt)
 
@@ -278,10 +408,28 @@ func printEntry(entry memories.Entry) {
 	fmt.Printf("Title:        %s\n", entry.Title)
 	fmt.Printf("Content Type: %s\n", entry.ContentType)
 	fmt.Printf("Deleted:      %t\n", entry.Deleted)
+	
+	if len(tags) > 0 {
+		fmt.Printf("Tags:         %s\n", formatTagsList(tags))
+	}
+	
 	fmt.Printf("Created At:   %s\n", createdAt)
 	fmt.Printf("Updated At:   %s\n", updatedAt)
 	fmt.Println("\nContent:")
 	fmt.Println("------------------------------------------------------------")
 	fmt.Println(entry.Content)
 	fmt.Println("------------------------------------------------------------")
+}
+
+func formatTagsList(tags []memories.Tag) string {
+	if len(tags) == 0 {
+		return "none"
+	}
+
+	tagNames := make([]string, len(tags))
+	for i, tag := range tags {
+		tagNames[i] = tag.Tag
+	}
+
+	return strings.Join(tagNames, ", ")
 }

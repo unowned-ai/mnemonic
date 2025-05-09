@@ -115,7 +115,8 @@ func initCmd() {
 	
 	initJournalsCmd()
 	initEntriesCmd()
-	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd, entriesCmd)
+	initTagsCmd()
+	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd, entriesCmd, tagsCmd)
 }
 
 func main() {
