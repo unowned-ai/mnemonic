@@ -86,7 +86,7 @@ var dbCmd = &cobra.Command{
 var dbUpgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade the Mnemonic database schema to the latest version for the memoriesdb component",
-	Long:  `Connects to the SQLite database at the specified path (provided with the --db flag) and applies any necessary
+	Long: `Connects to the SQLite database at the specified path (provided with the --db flag) and applies any necessary
 schema migrations to bring the memoriesdb component up to the current application schema version.
 If the database does not exist or is uninitialized for this component, it will be created
 and initialized with the latest schema for the memoriesdb component.`,
@@ -124,7 +124,8 @@ func initCmd() {
 	initJournalsCmd()
 	initEntriesCmd()
 	initTagsCmd()
-	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd, entriesCmd, tagsCmd)
+	initSearchCmd()
+	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd, entriesCmd, tagsCmd, searchCmd)
 }
 
 func main() {
