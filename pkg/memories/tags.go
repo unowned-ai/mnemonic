@@ -52,6 +52,15 @@ const (
 	`
 )
 
+func CreateTag(ctx context.Context, db *sql.DB, tagName string) error {
+	_, err := db.ExecContext(ctx, createTagStatement, tagName)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func TagEntry(ctx context.Context, db *sql.DB, entryID uuid.UUID, tagName string) error {
 	_, err := GetEntry(ctx, db, entryID)
 	if err != nil {

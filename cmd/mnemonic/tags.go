@@ -84,6 +84,30 @@ var deleteTagCmd = &cobra.Command{
 	},
 }
 
+var createTagCmd = &cobra.Command{
+	Use:   "create [tag-name]",
+	Short: "Create a new tag",
+	Long:  `Create a new tag.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tagName := args[0]
+
+		dbConn, err := openDB()
+		if err != nil {
+			return err
+		}
+		defer dbConn.Close()
+
+		err = memories.CreateTag(context.Background(), dbConn, tagName)
+		if err != nil {
+			return fmt.Errorf("failed to create tag: %w", err)
+		}
+
+		fmt.Printf("Tag '%s' created successfully!\n", tagName)
+		return nil
+	},
+}
+
 // Tag and untag commands are defined in entries.go
 
 func initTagsCmd() {
@@ -98,6 +122,7 @@ func initTagsCmd() {
 	tagsCmd.AddCommand(
 		listTagsCmd,
 		deleteTagCmd,
+		createTagCmd,
 	)
 }
 
