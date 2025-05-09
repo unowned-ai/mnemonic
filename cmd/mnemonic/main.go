@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -16,6 +17,10 @@ var rootCmd = &cobra.Command{
 	Short:   "A self-hostable datastore for your memories to share with your AI models.",
 	Long:    ``,
 	Version: fmt.Sprintf("v%s", mnemonic.Version),
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// This is a good place to ensure dbPath is usable if needed globally before RunE
+		// For now, openDB handles the check.
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},
@@ -83,14 +88,19 @@ var dbCmd = &cobra.Command{
 }
 
 var dbUpgradeCmd = &cobra.Command{
-	Use:   "upgrade [path_to_db_file]",
+	Use:   "upgrade",
 	Short: "Upgrade the Mnemonic database schema to the latest version for the memoriesdb component",
-	Long:  `Connects to the SQLite database at the specified path and applies any necessary\nschema migrations to bring the memoriesdb component up to the current application schema version. \nIf the database does not exist or is uninitialized for this component, it will be created \nand initialized with the latest schema for the memoriesdb component.`,
-	Args:  cobra.ExactArgs(1),
+	Long: `Connects to the SQLite database at the specified path (provided with the --db flag) and applies any necessary
+schema migrations to bring the memoriesdb component up to the current application schema version.
+If the database does not exist or is uninitialized for this component, it will be created
+and initialized with the latest schema for the memoriesdb component.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dbPath := args[0]
 		walEnabled, _ := cmd.Flags().GetBool("wal")
 		syncMode, _ := cmd.Flags().GetString("sync")
+
+		if dbPath == "" {
+			return errors.New("database path is required")
+		}
 
 		fmt.Printf("Attempting to upgrade memoriesdb component in database at: %s (WAL: %t, Sync: %s)\n", dbPath, walEnabled, syncMode)
 
@@ -108,11 +118,28 @@ var dbUpgradeCmd = &cobra.Command{
 }
 
 func initCmd() {
+	// Define persistent DB flags on rootCmd so all commands can use them
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
+	rootCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
+	rootCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
+	// It's often better to mark required flags on the specific commands that need them,
+	// or use PersistentPreRunE on rootCmd to validate if dbPath is always needed.
+	// For now, individual commands like dbUpgrade, entries, journals, tags, search
+	// will rely on openDB() checking dbPath or their own MarkFlagRequired if they have it.
+	// Or, if "db" is truly global, rootCmd.MarkPersistentFlagRequired("db") could be used.
+
+	dbUpgradeCmd.Flags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
 	dbUpgradeCmd.Flags().Bool("wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode.")
 	dbUpgradeCmd.Flags().String("sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA).")
+	dbUpgradeCmd.MarkFlagRequired("db")
 
 	dbCmd.AddCommand(dbUpgradeCmd)
-	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd)
+
+	initJournalsCmd()
+	initEntriesCmd()
+	initTagsCmd()
+	initSearchCmd()
+	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd, entriesCmd, tagsCmd, searchCmd)
 }
 
 func main() {

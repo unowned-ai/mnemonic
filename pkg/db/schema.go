@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS entries (
     title VARCHAR(256) NOT NULL,
     content TEXT NOT NULL,
     content_type VARCHAR(64) DEFAULT 'text/plain',
+    deleted BOOLEAN DEFAULT FALSE,
     created_at REAL DEFAULT (unixepoch()),
     updated_at REAL DEFAULT (unixepoch())
 );
