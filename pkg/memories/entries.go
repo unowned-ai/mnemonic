@@ -57,7 +57,6 @@ const (
 func CreateEntry(ctx context.Context, db *sql.DB, journalID uuid.UUID, title, content, contentType string) (Entry, error) {
 	entryID := uuid.New()
 
-	// Check if journal exists
 	_, err := GetJournal(ctx, db, journalID)
 	if err != nil {
 		if errors.Is(err, ErrJournalNotFound) {
@@ -66,12 +65,10 @@ func CreateEntry(ctx context.Context, db *sql.DB, journalID uuid.UUID, title, co
 		return Entry{}, err
 	}
 
-	// Use default content type if not provided
 	if contentType == "" {
 		contentType = "text/plain"
 	}
 
-	// Initialize the deleted flag to false
 	deleted := false
 
 	_, err = db.ExecContext(
@@ -88,7 +85,6 @@ func CreateEntry(ctx context.Context, db *sql.DB, journalID uuid.UUID, title, co
 		return Entry{}, err
 	}
 
-	// Fetch the entry to get the timestamps that SQLite created
 	return GetEntry(ctx, db, entryID)
 }
 
@@ -118,7 +114,6 @@ func GetEntry(ctx context.Context, db *sql.DB, id uuid.UUID) (Entry, error) {
 
 // TODO: Add pagination support
 func ListEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID, includeDeleted bool) ([]Entry, error) {
-	// First check if the journal exists
 	_, err := GetJournal(ctx, db, journalID)
 	if err != nil {
 		if errors.Is(err, ErrJournalNotFound) {
@@ -161,15 +156,12 @@ func ListEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID, includeDe
 	return entries, nil
 }
 
-// UpdateEntry now accepts *sql.DB again
 func UpdateEntry(ctx context.Context, db *sql.DB, id uuid.UUID, title, content, contentType string) (Entry, error) {
-	// First check if the entry exists
 	existingEntry, err := GetEntry(ctx, db, id)
 	if err != nil {
 		return Entry{}, err
 	}
 
-	// Use existing values if not provided
 	if title == "" {
 		title = existingEntry.Title
 	}
@@ -201,19 +193,15 @@ func UpdateEntry(ctx context.Context, db *sql.DB, id uuid.UUID, title, content, 
 		return Entry{}, ErrEntryNotFound
 	}
 
-	// Fetch the updated entry to get the new values including the timestamp
 	return GetEntry(ctx, db, id)
 }
 
-// DeleteEntry now accepts *sql.DB again
 func DeleteEntry(ctx context.Context, db *sql.DB, id uuid.UUID) error {
-	// First check if the entry exists
 	_, err := GetEntry(ctx, db, id)
 	if err != nil {
 		return err
 	}
 
-	// Soft delete by setting the deleted flag to true
 	res, err := db.ExecContext(ctx, softDeleteEntryStatement, id)
 	if err != nil {
 		return err
@@ -231,9 +219,7 @@ func DeleteEntry(ctx context.Context, db *sql.DB, id uuid.UUID) error {
 	return nil
 }
 
-// DeleteEntriesByJournal now accepts *sql.DB again
 func DeleteEntriesByJournal(ctx context.Context, db *sql.DB, journalID uuid.UUID) (int64, error) {
-	// First check if the journal exists
 	_, err := GetJournal(ctx, db, journalID)
 	if err != nil {
 		return 0, err
@@ -247,15 +233,12 @@ func DeleteEntriesByJournal(ctx context.Context, db *sql.DB, journalID uuid.UUID
 	return res.RowsAffected()
 }
 
-// CleanDeletedEntries now accepts *sql.DB again
 func CleanDeletedEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID) (int64, error) {
-	// First check if the journal exists
 	_, err := GetJournal(ctx, db, journalID)
 	if err != nil {
 		return 0, err
 	}
 
-	// Permanently delete all entries that are marked as deleted
 	res, err := db.ExecContext(ctx, cleanDeletedEntriesStatement, journalID)
 	if err != nil {
 		return 0, err

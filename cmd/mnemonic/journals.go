@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	dbPath  string
-	walMode bool
-	syncMode string
+	dbPath     string
+	walMode    bool
+	syncMode   string
 	activeOnly bool
 )
 
@@ -112,7 +112,7 @@ var listJournalsCmd = &cobra.Command{
 		for _, j := range journals {
 			createdAt := formatTimestamp(j.CreatedAt)
 			updatedAt := formatTimestamp(j.UpdatedAt)
-			fmt.Printf("%s | %s | %s | %t | %s | %s\n", 
+			fmt.Printf("%s | %s | %s | %t | %s | %s\n",
 				j.ID, j.Name, j.Description, j.Active, createdAt, updatedAt)
 		}
 		return nil
@@ -141,7 +141,6 @@ var updateJournalCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		// First get the current journal to preserve any fields not being updated
 		currentJournal, err := memories.GetJournal(context.Background(), dbConn, journalID)
 		if errors.Is(err, memories.ErrJournalNotFound) {
 			return fmt.Errorf("journal not found: %s", journalIDStr)
@@ -150,7 +149,6 @@ var updateJournalCmd = &cobra.Command{
 			return fmt.Errorf("failed to get journal: %w", err)
 		}
 
-		// Use existing values if no new values provided
 		if name == "" {
 			name = currentJournal.Name
 		}
@@ -225,26 +223,21 @@ var cleanJournalsCmd = &cobra.Command{
 }
 
 func initJournalsCmd() {
-	// Add common database flags
 	journalsCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
 	journalsCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
 	journalsCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
 	journalsCmd.MarkPersistentFlagRequired("db")
 
-	// Create command flags
 	createJournalCmd.Flags().String("name", "", "Name of the journal (required)")
 	createJournalCmd.Flags().String("description", "", "Description of the journal")
 	createJournalCmd.MarkFlagRequired("name")
 
-	// List command flags
 	listJournalsCmd.Flags().BoolVar(&activeOnly, "active-only", false, "List only active journals")
 
-	// Update command flags
 	updateJournalCmd.Flags().String("name", "", "New name for the journal")
 	updateJournalCmd.Flags().String("description", "", "New description for the journal")
 	updateJournalCmd.Flags().Bool("active", true, "Set journal active status")
 
-	// Add all commands to journals command
 	journalsCmd.AddCommand(
 		createJournalCmd,
 		getJournalCmd,
@@ -276,7 +269,6 @@ func printJournal(journal memories.Journal) {
 }
 
 func formatTimestamp(timestamp float64) string {
-	// Convert Unix timestamp to a human-readable format
 	timeObj := time.Unix(int64(timestamp), 0)
 	return timeObj.Format(time.RFC3339)
 }

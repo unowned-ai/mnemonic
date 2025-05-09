@@ -63,7 +63,6 @@ func CreateJournal(ctx context.Context, db *sql.DB, name, description string) (J
 		return Journal{}, err
 	}
 
-	// Fetch the journal to get the timestamps that SQLite created
 	return GetJournal(ctx, db, journalID)
 }
 
@@ -144,7 +143,6 @@ func UpdateJournal(ctx context.Context, db *sql.DB, id uuid.UUID, name, descript
 		return Journal{}, ErrJournalNotFound
 	}
 
-	// Fetch the updated journal to get the new values including the timestamp
 	return GetJournal(ctx, db, id)
 }
 

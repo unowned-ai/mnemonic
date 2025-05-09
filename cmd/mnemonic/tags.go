@@ -87,17 +87,14 @@ var deleteTagCmd = &cobra.Command{
 // Tag and untag commands are defined in entries.go
 
 func initTagsCmd() {
-	// Add database flags to the tags command
 	tagsCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
 	tagsCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
 	tagsCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
 	tagsCmd.MarkPersistentFlagRequired("db")
 
-	// List tags command flags
 	listTagsCmd.Flags().StringVar(&journalIDFlag, "journal", "", "Journal ID (required)")
 	listTagsCmd.MarkFlagRequired("journal")
 
-	// Add commands to the tags command
 	tagsCmd.AddCommand(
 		listTagsCmd,
 		deleteTagCmd,

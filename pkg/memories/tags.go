@@ -53,7 +53,6 @@ const (
 )
 
 func TagEntry(ctx context.Context, db *sql.DB, entryID uuid.UUID, tagName string) error {
-	// First check if the entry exists
 	_, err := GetEntry(ctx, db, entryID)
 	if err != nil {
 		return err
@@ -65,13 +64,11 @@ func TagEntry(ctx context.Context, db *sql.DB, entryID uuid.UUID, tagName string
 	}
 	defer tx.Rollback()
 
-	// Create or get the tag
 	_, err = tx.ExecContext(ctx, createTagStatement, tagName)
 	if err != nil {
 		return err
 	}
 
-	// Attach the tag to the entry
 	_, err = tx.ExecContext(ctx, attachTagToEntryStatement, entryID, tagName)
 	if err != nil {
 		return err
@@ -81,7 +78,6 @@ func TagEntry(ctx context.Context, db *sql.DB, entryID uuid.UUID, tagName string
 }
 
 func DetachTag(ctx context.Context, db *sql.DB, entryID uuid.UUID, tagName string) error {
-	// First check if the entry exists
 	_, err := GetEntry(ctx, db, entryID)
 	if err != nil {
 		return err
@@ -105,7 +101,6 @@ func DetachTag(ctx context.Context, db *sql.DB, entryID uuid.UUID, tagName strin
 }
 
 func ListTags(ctx context.Context, db *sql.DB, journalID uuid.UUID) ([]Tag, error) {
-	// First check if the journal exists
 	_, err := GetJournal(ctx, db, journalID)
 	if err != nil {
 		return nil, err
@@ -141,7 +136,6 @@ func ListTags(ctx context.Context, db *sql.DB, journalID uuid.UUID) ([]Tag, erro
 }
 
 func ListTagsForEntry(ctx context.Context, db *sql.DB, entryID uuid.UUID) ([]Tag, error) {
-	// First check if the entry exists
 	_, err := GetEntry(ctx, db, entryID)
 	if err != nil {
 		return nil, err

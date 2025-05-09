@@ -67,7 +67,6 @@ var createEntryCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		// Step 1: Create the entry
 		entry, err := memories.CreateEntry(cmd.Context(), dbConn, journalID, title, content, contentTypeFlag)
 		if errors.Is(err, memories.ErrJournalNotFound) {
 			return fmt.Errorf("journal not found: %s", journalIDFlag)
@@ -76,25 +75,21 @@ var createEntryCmd = &cobra.Command{
 			return fmt.Errorf("failed to create entry: %w", err)
 		}
 
-		// Step 2: Tag the entry if tags were provided
 		var lastTaggingError error
 		for _, tagName := range tagNames {
 			err = memories.TagEntry(cmd.Context(), dbConn, entry.ID, tagName)
 			if err != nil {
-				// Collect last error, but continue trying to apply other tags
 				lastTaggingError = fmt.Errorf("failed to apply tag '%s': %w", tagName, err)
-				cmd.PrintErrln(lastTaggingError) // Print error for each failed tag
+				cmd.PrintErrln(lastTaggingError)
 			}
 		}
 
-		// Fetch tags to display them
 		createdEntryTags, listTagsErr := memories.ListTagsForEntry(cmd.Context(), dbConn, entry.ID)
 		if listTagsErr != nil {
 			cmd.PrintErrf("Failed to retrieve tags for new entry: %v\n", listTagsErr)
 		}
 		printEntry(entry, createdEntryTags)
 
-		// Return the last tagging error if any occurred, so CLI indicates partial failure
 		if lastTaggingError != nil {
 			return fmt.Errorf("entry created, but some tags failed to apply: %w", lastTaggingError)
 		}
@@ -223,7 +218,6 @@ var updateEntryCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		// Revert: No explicit transaction needed here for UpdateEntry as it now takes *sql.DB
 		entry, err := memories.UpdateEntry(cmd.Context(), dbConn, entryID, title, content, contentTypeFlag)
 		if errors.Is(err, memories.ErrEntryNotFound) {
 			return fmt.Errorf("entry not found: %s", entryIDStr)
@@ -261,7 +255,6 @@ var deleteEntryCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		// Revert: No explicit transaction needed here for DeleteEntry
 		err = memories.DeleteEntry(cmd.Context(), dbConn, entryID)
 		if errors.Is(err, memories.ErrEntryNotFound) {
 			return fmt.Errorf("entry not found: %s", entryIDStr)
@@ -291,7 +284,6 @@ var cleanEntriesCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		// Revert: No explicit transaction needed here for CleanDeletedEntries
 		count, err := memories.CleanDeletedEntries(cmd.Context(), dbConn, journalID)
 		if errors.Is(err, memories.ErrJournalNotFound) {
 			return fmt.Errorf("journal not found: %s", journalIDFlag)
@@ -401,7 +393,6 @@ var untagEntryCmd = &cobra.Command{
 }
 
 func initEntriesCmd() {
-	// Common flags for entries commands
 	entriesCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
 	entriesCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
 	entriesCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
@@ -409,7 +400,6 @@ func initEntriesCmd() {
 	entriesCmd.PersistentFlags().StringVar(&contentTypeFlag, "content-type", "", "Content type (e.g., text/plain, text/markdown)")
 	entriesCmd.MarkPersistentFlagRequired("db")
 
-	// Create command flags
 	createEntryCmd.Flags().String("title", "", "Title of the entry (required)")
 	createEntryCmd.Flags().String("content", "", "Content of the entry (required)")
 	createEntryCmd.Flags().String("tags", "", "Comma-separated list of tags for the entry")
@@ -417,22 +407,17 @@ func initEntriesCmd() {
 	createEntryCmd.MarkFlagRequired("content")
 	createEntryCmd.MarkFlagRequired("journal")
 
-	// Get command flags
 	getEntryCmd.Flags().BoolVar(&showTagsFlag, "tags", false, "Show tags for the entry")
 
-	// List command flags
 	listEntriesCmd.Flags().BoolVar(&includeDeletedFlag, "include-deleted", false, "Include soft-deleted entries in the listing")
 	listEntriesCmd.Flags().BoolVar(&showTagsFlag, "tags", false, "Show tags for each entry")
 	listEntriesCmd.MarkFlagRequired("journal")
 
-	// Update command flags
 	updateEntryCmd.Flags().String("title", "", "New title for the entry")
 	updateEntryCmd.Flags().String("content", "", "New content for the entry")
 
-	// Clean entries command flags
 	cleanEntriesCmd.MarkFlagRequired("journal")
 
-	// Add all commands to entries command
 	entriesCmd.AddCommand(
 		createEntryCmd,
 		getEntryCmd,
