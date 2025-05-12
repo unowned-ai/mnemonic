@@ -61,11 +61,13 @@ jobs:
           go-version: ^1.24.2
 
       - name: Install cross-compilation tools
+        env:
+          GOOS: ${{ matrix.goos }}
         run: |
-          if [ ${{ matrix.os }} = "ubuntu-22.04" ]; then
+          if [ "$GOOS" = "ubuntu-22.04" ]; then
             sudo apt update
             sudo apt install -y gcc g++ gcc-multilib g++-multilib mingw-w64 libc6-dev-i386
-          if [ ${{ matrix.os }} = "ubuntu-latest" ]; then
+          elif [ "$GOOS" = "ubuntu-latest" ]; then
             sudo apt update
             sudo apt install -y gcc mingw-w64
           fi
