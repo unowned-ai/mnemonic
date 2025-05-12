@@ -106,7 +106,7 @@ func (s *RecallMCPServer) MCPRawServer() *server.MCPServer {
 // Close cleans up allocated resources.
 func (s *RecallMCPServer) Close() error {
 	if s.db != nil {
-		// TRUNCATE mode waits for transactions and writes the WAL back to the main DB.
+		// Checkpointing: https://www.sqlite.org/c3ref/wal_checkpoint_v2.html
 		_, err := s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE);")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: WAL checkpoint failed during close: %v\n", err)
