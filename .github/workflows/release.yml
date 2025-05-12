@@ -29,19 +29,19 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             goos: linux
             goarch: amd64
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             goos: linux
             goarch: arm64
           - os: ubuntu-22.04
             goos: linux
             goarch: 386
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             goos: windows
             goarch: amd64
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             goos: windows
             goarch: 386
           - os: macos-latest
@@ -66,10 +66,7 @@ jobs:
         run: |
           if [ "$OS" = "ubuntu-22.04" ]; then
             sudo apt update
-            sudo apt install -y gcc g++ gcc-multilib g++-multilib mingw-w64 libc6-dev-i386
-          elif [ "$OS" = "ubuntu-latest" ]; then
-            sudo apt update
-            sudo apt install -y gcc mingw-w64
+            sudo apt install -y gcc g++ gcc-multilib g++-multilib mingw-w64 libc6-dev-i386 gcc-aarch64-linux-gnu
           fi
 
       - name: Build recall binary
@@ -88,6 +85,7 @@ jobs:
           # Select correct compiler for CGO cross builds
           if [ "$GOOS" = "windows" ]; then
             if [ "$GOARCH" = "amd64" ]; then export CC="x86_64-w64-mingw32-gcc"; fi
+            if [ "$GOARCH" = "arm64" ]; then export CC="aarch64-linux-gnu-gcc"; fi
             if [ "$GOARCH" = "386" ]; then export CC="i686-w64-mingw32-gcc"; fi
           fi
 
