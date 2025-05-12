@@ -121,7 +121,7 @@ func initCmd() {
 	// Define persistent DB flags on rootCmd so all commands can use them
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (optional for mcp command, uses system-specific default if not provided)")
 	rootCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
-	rootCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
+	rootCmd.PersistentFlags().StringVar(&syncMode, "sync", "FULL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
 	// It's often better to mark required flags on the specific commands that need them,
 	// or use PersistentPreRunE on rootCmd to validate if dbPath is always needed.
 	// For now, individual commands like dbUpgrade, entries, journals, tags, search
@@ -130,7 +130,7 @@ func initCmd() {
 
 	dbUpgradeCmd.Flags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
 	dbUpgradeCmd.Flags().Bool("wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode.")
-	dbUpgradeCmd.Flags().String("sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA).")
+	dbUpgradeCmd.Flags().String("sync", "FULL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA).")
 	dbUpgradeCmd.MarkFlagRequired("db")
 
 	dbCmd.AddCommand(dbUpgradeCmd)
