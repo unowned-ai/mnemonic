@@ -119,7 +119,7 @@ and initialized with the latest schema for the memoriesdb component.`,
 
 func initCmd() {
 	// Define persistent DB flags on rootCmd so all commands can use them
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (optional for mcp command, uses system-specific default if not provided)")
 	rootCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
 	rootCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
 	// It's often better to mark required flags on the specific commands that need them,

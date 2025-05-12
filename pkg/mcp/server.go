@@ -13,8 +13,8 @@ import (
 	pkgdb "github.com/unowned-ai/mnemonic/pkg/db"
 )
 
-// getDefaultDBPath returns a system-appropriate default path for the database.
-func getDefaultDBPath() string {
+// GetDefaultDBPath returns a system-appropriate default path for the database.
+func GetDefaultDBPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		// Fallback to current directory if home dir can't be determined
@@ -42,7 +42,7 @@ type MnemonicMCPServer struct {
 func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
 	// Set default path if not provided
 	if dbPath == "" {
-		dbPath = getDefaultDBPath()
+		dbPath = GetDefaultDBPath()
 	}
 
 	// Expand ~ to home directory if present
@@ -98,6 +98,11 @@ func (s *MnemonicMCPServer) Start() error {
 // DB returns the underlying *sql.DB.
 func (s *MnemonicMCPServer) DB() *sql.DB {
 	return s.db
+}
+
+// DBPath returns the database path used by this server.
+func (s *MnemonicMCPServer) DBPath() string {
+	return s.dbPath
 }
 
 // MCPRawServer exposes the raw mcp-go server (useful for additional configuration).

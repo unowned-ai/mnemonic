@@ -47,3 +47,4 @@ See [MCP Configuration Examples](docs/mcp-config-examples.md) for detailed setup
 - **Smart Path Handling**: Paths with `~` are expanded to your home directory
 - **Directory Creation**: Parent directories are created automatically if they don't exist
 - **System-Specific Defaults**: Each platform has an appropriate default database location
+- **MCP Protocol Fix**: Database initialization logs now properly go to stderr instead of breaking JSON-RPC communication
