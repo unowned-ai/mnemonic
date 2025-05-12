@@ -64,7 +64,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt update
-          sudo apt install -y gcc mingw-w64
+          sudo apt install -y gcc g++ mingw-w64 gcc-aarch64-linux-gnu
 
       - name: Build recall binary
         env:
