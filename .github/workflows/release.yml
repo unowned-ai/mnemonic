@@ -65,12 +65,14 @@ jobs:
           if [ "${{ matrix.goos }}" = "linux" ]; then
             sudo apt update
             sudo apt install -y gcc
-            if [ "${{ matrix.goarch }}" = "386" ]; then
+            if [ "${{ matrix.goarch }}" = "arm64" ]; then
+              sudo apt install -y gcc-aarch64-linux-gnu
+            elif [ "${{ matrix.goarch }}" = "386" ]; then
               sudo apt install -y g++ gcc-multilib g++-multilib libc6-dev-i386
             fi
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             sudo apt update
-            sudo apt install -y gcc mingw-w64
+            sudo apt install -y mingw-w64
           fi
 
       - name: Build recall binary
