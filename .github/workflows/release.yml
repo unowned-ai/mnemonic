@@ -32,9 +32,9 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
-          # - os: ubuntu-22.04
-          #   goos: linux
-          #   goarch: arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
           - os: ubuntu-22.04
             goos: linux
             goarch: 386
@@ -62,12 +62,12 @@ jobs:
 
       - name: Install cross-compilation tools
         run: |
-          if [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "arm64" ]; then
+          if [ "${{ matrix.goos }}" = "linux" ]; then
             sudo apt update
-            sudo apt install -y gcc gcc-aarch64-linux-gnu
-          elif [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "386" ]; then
-            sudo apt update
-            sudo apt install -y gcc g++ gcc-multilib g++-multilib libc6-dev-i386
+            sudo apt install -y gcc
+            if [ "${{ matrix.goarch }}" = "386" ]; then
+              sudo apt install -y g++ gcc-multilib g++-multilib libc6-dev-i386
+            fi
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             sudo apt update
             sudo apt install -y gcc mingw-w64
@@ -91,6 +91,8 @@ jobs:
             if [ "$GOARCH" = "amd64" ]; then export CC="x86_64-w64-mingw32-gcc"; fi
             if [ "$GOARCH" = "arm64" ]; then export CC="aarch64-linux-gnu-gcc"; fi
             if [ "$GOARCH" = "386" ]; then export CC="i686-w64-mingw32-gcc"; fi
+          elif [ "$GOOS" = "linux" ]; then
+            if [ "$GOARCH" = "arm64" ]; then export CC="aarch64-linux-gnu-gcc"; fi
           fi
 
           go build -o "$BUILD_DIR/recall${EXTESION}" ./cmd/recall
