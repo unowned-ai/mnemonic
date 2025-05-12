@@ -68,7 +68,7 @@ func NewRecallMCPServer(dbPath string) (*RecallMCPServer, error) {
 		server.WithRecovery(),
 	)
 
-	// Open database (WAL + FULL sync by default for increased durability).
+	// Open database (WAL + FULL).
 	dbConn, err := pkgdb.OpenDBConnection(dbPath, true, "FULL")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
@@ -106,11 +106,9 @@ func (s *RecallMCPServer) MCPRawServer() *server.MCPServer {
 // Close cleans up allocated resources.
 func (s *RecallMCPServer) Close() error {
 	if s.db != nil {
-		// Attempt to checkpoint the WAL before closing.
 		// TRUNCATE mode waits for transactions and writes the WAL back to the main DB.
 		_, err := s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE);")
 		if err != nil {
-			// Log the error but proceed with closing.
 			fmt.Fprintf(os.Stderr, "Warning: WAL checkpoint failed during close: %v\n", err)
 		}
 		return s.db.Close()
