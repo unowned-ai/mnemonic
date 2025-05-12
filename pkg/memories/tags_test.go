@@ -12,7 +12,7 @@ func TestTagEntry(t *testing.T) {
 	defer testDB.Close()
 
 	ctx := context.Background()
-	
+
 	// Create an entry to tag
 	entry, err := CreateEntry(ctx, testDB, journalID, "Entry to Tag", "Content", "text/plain")
 	if err != nil {
@@ -134,7 +134,7 @@ func TestDetachTag(t *testing.T) {
 	defer testDB.Close()
 
 	ctx := context.Background()
-	
+
 	// Create an entry and tag it
 	entry, err := CreateEntry(ctx, testDB, journalID, "Entry to Tag", "Content", "text/plain")
 	if err != nil {
@@ -175,7 +175,7 @@ func TestDeleteTag(t *testing.T) {
 	defer testDB.Close()
 
 	ctx := context.Background()
-	
+
 	// Create entries and tag them
 	entry1, err := CreateEntry(ctx, testDB, journalID, "Entry 1", "Content 1", "text/plain")
 	if err != nil {
