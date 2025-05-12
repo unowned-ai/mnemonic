@@ -29,7 +29,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             goos: linux
             goarch: amd64
           - os: ubuntu-22.04
@@ -38,10 +38,10 @@ jobs:
           - os: ubuntu-22.04
             goos: linux
             goarch: 386
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             goos: windows
             goarch: amd64
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             goos: windows
             goarch: 386
           - os: macos-latest
@@ -61,12 +61,16 @@ jobs:
           go-version: ^1.24.2
 
       - name: Install cross-compilation tools
-        env:
-          OS: ${{ matrix.os }}
         run: |
-          if [ "$OS" = "ubuntu-22.04" ]; then
+          if [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "arm64" ]; then
             sudo apt update
-            sudo apt install -y gcc g++ gcc-multilib g++-multilib mingw-w64 libc6-dev-i386 gcc-aarch64-linux-gnu
+            sudo apt install -y gcc gcc-aarch64-linux-gnu
+          elif [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "386" ]; then
+            sudo apt update
+            sudo apt install -y gcc g++ gcc-multilib g++-multilib libc6-dev-i386
+          elif [ "${{ matrix.goos }}" = "windows" ]; then
+            sudo apt update
+            sudo apt install -y gcc mingw-w64
           fi
 
       - name: Build recall binary
