@@ -10,7 +10,6 @@ require (
 )
 
 require (
-
 	// indirect dependencies pulled by mcp-go
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/cast v1.8.0 // indirect
