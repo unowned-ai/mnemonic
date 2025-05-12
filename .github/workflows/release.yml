@@ -97,7 +97,7 @@ jobs:
             if [ "$GOARCH" = "arm64" ]; then export CC="aarch64-linux-gnu-gcc"; fi
           fi
 
-          go build -o "$BUILD_DIR/recall${EXTESION}" ./cmd/recall
+          go build -o "$BUILD_DIR/recall${EXTENSION}" ./cmd/recall
           zip -r "$BUILD_DIR.zip" "$BUILD_DIR"
 
       - name: Upload release assets for each valid (GOOS, GOARH) pair
