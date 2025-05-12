@@ -1,0 +1,98 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  prepare_release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-release@v1
+        id: prepare_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: "recall ${{ github.ref_name }}"
+          body: |
+            Version ${{ github.ref_name }}.
+          draft: true
+          prerelease: false
+    outputs:
+      upload_url: ${{ steps.prepare_release.outputs.upload_url }}
+
+  prepare_assets:
+    needs: prepare_release
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: 386
+          - os: ubuntu-latest
+            goos: windows
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: windows
+            goarch: 386
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ^1.24.2
+
+      - name: Install cross-compilation tools
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt update
+          sudo apt install -y gcc mingw-w64
+
+      - name: Build recall binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 1
+        run: |
+          BUILD_DIR="recall-${{ github.ref_name }}-${GOOS}-${GOARCH}"
+          mkdir "$BUILD_DIR"
+          cp README.md "$BUILD_DIR/README.md"
+
+          EXTENSION=""
+          if [ "$GOOS" = "windows" ]; then EXTENSION=".exe"; fi
+
+          # Select correct compiler for CGO cross builds
+          if [ "$GOOS" = "windows" ]; then
+            if [ "$GOARCH" = "amd64" ]; then export CC="x86_64-w64-mingw32-gcc"; fi
+            if [ "$GOARCH" = "386" ]; then export CC="i686-w64-mingw32-gcc"; fi
+          fi
+
+          go build -o "$BUILD_DIR/recall${EXTESION}" ./...
+          zip -r "$BUILD_DIR.zip" "$BUILD_DIR"
+
+      - name: Upload release assets for each valid (GOOS, GOARH) pair
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.prepare_release.outputs.upload_url }}
+          asset_path: ./recall-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}.zip
+          asset_name: recall-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}.zip
+          asset_content_type: application/zip
