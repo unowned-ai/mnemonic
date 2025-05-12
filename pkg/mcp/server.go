@@ -3,11 +3,33 @@ package mcp
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/server"
 	mnemonicpkg "github.com/unowned-ai/mnemonic/pkg"
 	pkgdb "github.com/unowned-ai/mnemonic/pkg/db"
 )
+
+// getDefaultDBPath returns a system-appropriate default path for the database.
+func getDefaultDBPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to current directory if home dir can't be determined
+		return "mnemonic.db"
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		return filepath.Join(homeDir, "AppData", "Roaming", "mnemonic", "mnemonic.db")
+	case "darwin":
+		return filepath.Join(homeDir, "Library", "Application Support", "mnemonic", "mnemonic.db")
+	default: // linux and others
+		return filepath.Join(homeDir, ".local", "share", "mnemonic", "mnemonic.db")
+	}
+}
 
 // MnemonicMCPServer wraps the MCP server with a database handle.
 type MnemonicMCPServer struct {
@@ -18,9 +40,27 @@ type MnemonicMCPServer struct {
 
 // NewMnemonicMCPServer spins up an MCP server backed by the SQLite database at dbPath.
 func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
+	// Set default path if not provided
 	if dbPath == "" {
-		return nil, fmt.Errorf("database path cannot be empty for MnemonicMCPServer")
+		dbPath = getDefaultDBPath()
 	}
+
+	// Expand ~ to home directory if present
+	if strings.HasPrefix(dbPath, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			dbPath = filepath.Join(homeDir, dbPath[2:])
+		}
+	}
+
+	// Ensure parent directory exists
+	dbDir := filepath.Dir(dbPath)
+	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create directory for database: %w", err)
+		}
+	}
+
 	// Create base MCP server.
 	s := server.NewMCPServer(
 		"Mnemonic MCP Server",
@@ -34,6 +74,13 @@ func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
 	dbConn, err := pkgdb.OpenDBConnection(dbPath, true, "NORMAL")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
+	}
+
+	// Automatically initialize or migrate the database schema.
+	if err := pkgdb.UpgradeDB(dbConn, dbPath, pkgdb.TargetSchemaVersion); err != nil {
+		// Attempt to close the DB connection if upgrade fails.
+		dbConn.Close()
+		return nil, fmt.Errorf("failed to initialize/upgrade database schema for '%s': %w", dbPath, err)
 	}
 
 	return &MnemonicMCPServer{
