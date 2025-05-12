@@ -18,16 +18,16 @@ func GetDefaultDBPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		// Fallback to current directory if home dir can't be determined
-		return "mnemonic.db"
+		return "recall.db"
 	}
 
 	switch runtime.GOOS {
 	case "windows":
-		return filepath.Join(homeDir, "AppData", "Roaming", "mnemonic", "mnemonic.db")
+		return filepath.Join(homeDir, "AppData", "Roaming", "recall", "recall.db")
 	case "darwin":
-		return filepath.Join(homeDir, "Library", "Application Support", "mnemonic", "mnemonic.db")
+		return filepath.Join(homeDir, "Library", "Application Support", "recall", "recall.db")
 	default: // linux and others
-		return filepath.Join(homeDir, ".local", "share", "mnemonic", "mnemonic.db")
+		return filepath.Join(homeDir, ".local", "share", "recall", "recall.db")
 	}
 }
 
@@ -39,8 +39,7 @@ type MnemonicMCPServer struct {
 }
 
 // NewMnemonicMCPServer spins up an MCP server backed by the SQLite database at dbPath.
-func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
-	// Set default path if not provided
+func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, string, error) {
 	if dbPath == "" {
 		dbPath = GetDefaultDBPath()
 	}
@@ -57,7 +56,7 @@ func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
 	dbDir := filepath.Dir(dbPath)
 	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(dbDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create directory for database: %w", err)
+			return nil, "", fmt.Errorf("failed to create directory for database: %w", err)
 		}
 	}
 
@@ -73,21 +72,21 @@ func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
 	// Open database (WAL + NORMAL sync by default).
 	dbConn, err := pkgdb.OpenDBConnection(dbPath, true, "NORMAL")
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database connection: %w", err)
+		return nil, "", fmt.Errorf("failed to open database connection: %w", err)
 	}
 
 	// Automatically initialize or migrate the database schema.
 	if err := pkgdb.UpgradeDB(dbConn, dbPath, pkgdb.TargetSchemaVersion); err != nil {
 		// Attempt to close the DB connection if upgrade fails.
 		dbConn.Close()
-		return nil, fmt.Errorf("failed to initialize/upgrade database schema for '%s': %w", dbPath, err)
+		return nil, "", fmt.Errorf("failed to initialize/upgrade database schema for '%s': %w", dbPath, err)
 	}
 
 	return &MnemonicMCPServer{
 		mcpServer: s,
 		db:        dbConn,
 		dbPath:    dbPath,
-	}, nil
+	}, dbPath, nil
 }
 
 // Start runs the stdio event loop. Make sure to register tools beforehand.

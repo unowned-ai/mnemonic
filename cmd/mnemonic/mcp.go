@@ -15,9 +15,9 @@ var mcpCmd = &cobra.Command{
 journals, entries, tags and search functionality as MCP tools via STDIO.
 
 The --db flag is now optional. If not provided, a system-specific default location will be used:
-- Windows: %USERPROFILE%\AppData\Roaming\mnemonic\mnemonic.db
-- macOS: ~/Library/Application Support/mnemonic/mnemonic.db
-- Linux: ~/.local/share/mnemonic/mnemonic.db
+- Windows: %USERPROFILE%\AppData\Roaming\recall\recall.db
+- macOS: ~/Library/Application Support/recall/recall.db
+- Linux: ~/.local/share/recall/recall.db
 
 Example:
 
@@ -26,10 +26,9 @@ Example:
   # Or simply use the default location:
   mnemonic mcp`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// No longer checking for empty dbPath here, will use default if empty
 
 		// Create server wrapper.
-		srv, err := mcp.NewMnemonicMCPServer(dbPath)
+		srv, resolvedDbPath, err := mcp.NewMnemonicMCPServer(dbPath)
 		if err != nil {
 			return err
 		}
@@ -54,10 +53,9 @@ Example:
 		mcp.RegisterListTagsTool(s, db)
 		mcp.RegisterSearchEntriesTool(s, db)
 
-		// Show which database is being used
 		effectiveDbPath := dbPath
 		if effectiveDbPath == "" {
-			effectiveDbPath = srv.DBPath() // Get the actual path from the server
+			effectiveDbPath = resolvedDbPath
 		}
 
 		// Log to stderr so we don't contaminate the JSON-RPC stream on stdout.
