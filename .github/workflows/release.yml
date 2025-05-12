@@ -1,4 +1,4 @@
-name: Release with assets
+name: Release prepare
 
 on:
   push:
