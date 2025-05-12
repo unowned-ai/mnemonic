@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 
 	// No longer importing recallsync "github.com/unowned-ai/recall/pkg"
@@ -61,7 +62,7 @@ ON CONFLICT(component) DO UPDATE SET version = excluded.version, created_at = un
 		return fmt.Errorf("failed to insert/update version for component %s to %d: %w", MemoriesDBComponent, schemaVersionToSet, err)
 	}
 
-	fmt.Printf("Component %s initialized/updated to schema version %d\n", MemoriesDBComponent, schemaVersionToSet)
+	fmt.Fprintf(os.Stderr, "Component %s initialized/updated to schema version %d\n", MemoriesDBComponent, schemaVersionToSet)
 	return nil
 }
 
@@ -75,14 +76,14 @@ func UpgradeDB(db *sql.DB, dbIdentifierForLog string, appTargetSchemaVersion int
 	}
 
 	if currentDBVersion == 0 { // 0 indicates component not versioned or new DB
-		fmt.Printf("Component %s in database '%s' appears to be uninitialized or at version 0. Initializing/Upgrading to schema version %d...\n", MemoriesDBComponent, dbIdentifierForLog, appTargetSchemaVersion)
+		fmt.Fprintf(os.Stderr, "Component %s in database '%s' appears to be uninitialized or at version 0. Initializing/Upgrading to schema version %d...\n", MemoriesDBComponent, dbIdentifierForLog, appTargetSchemaVersion)
 		err = InitializeSchema(db, appTargetSchemaVersion) // Use the appTargetSchemaVersion
 		if err != nil {
 			return fmt.Errorf("failed to initialize component %s in database '%s': %w", MemoriesDBComponent, dbIdentifierForLog, err)
 		}
 		return nil
 	} else if currentDBVersion == appTargetSchemaVersion {
-		fmt.Printf("Component %s in database '%s' is already up to date (schema version %d).\n", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion)
+		fmt.Fprintf(os.Stderr, "Component %s in database '%s' is already up to date (schema version %d).\n", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion)
 		return nil
 	} else if currentDBVersion < appTargetSchemaVersion {
 		return fmt.Errorf("component %s in database '%s' has schema version %d, which is older than application's target schema version %d. Automatic migration from this older version is not yet supported", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion, appTargetSchemaVersion)
