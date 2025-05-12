@@ -68,8 +68,8 @@ jobs:
 
       - name: Build recall binary
         env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
         run: |
           BUILD_DIR="recall-${{ github.ref_name }}-${GOOS}-${GOARCH}"
@@ -94,6 +94,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.prepare_release.outputs.upload_url }}
-          asset_path: ./recall-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}.zip
-          asset_name: recall-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}.zip
+          asset_path: ./recall-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+          asset_name: recall-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip
           asset_content_type: application/zip
