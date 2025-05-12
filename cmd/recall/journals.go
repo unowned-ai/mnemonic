@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
-	"github.com/unowned-ai/mnemonic/pkg/db"
-	"github.com/unowned-ai/mnemonic/pkg/memories"
+	"github.com/unowned-ai/recall/pkg/db"
+	"github.com/unowned-ai/recall/pkg/memories"
 )
 
 var (

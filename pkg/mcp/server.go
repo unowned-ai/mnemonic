@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/mark3labs/mcp-go/server"
-	mnemonicpkg "github.com/unowned-ai/mnemonic/pkg"
-	pkgdb "github.com/unowned-ai/mnemonic/pkg/db"
+	recallpkg "github.com/unowned-ai/recall/pkg"
+	pkgdb "github.com/unowned-ai/recall/pkg/db"
 )
 
 // GetDefaultDBPath returns a system-appropriate default path for the database.
@@ -31,15 +31,14 @@ func GetDefaultDBPath() string {
 	}
 }
 
-// MnemonicMCPServer wraps the MCP server with a database handle.
-type MnemonicMCPServer struct {
+type RecallMCPServer struct {
 	mcpServer *server.MCPServer
 	db        *sql.DB
-	dbPath    string
+	DbPath    string
 }
 
-// NewMnemonicMCPServer spins up an MCP server backed by the SQLite database at dbPath.
-func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, string, error) {
+// NewRecallMCPServer spins up an MCP server backed by the SQLite database at dbPath.
+func NewRecallMCPServer(dbPath string) (*RecallMCPServer, error) {
 	if dbPath == "" {
 		dbPath = GetDefaultDBPath()
 	}
@@ -56,14 +55,14 @@ func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, string, error) {
 	dbDir := filepath.Dir(dbPath)
 	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(dbDir, 0755); err != nil {
-			return nil, "", fmt.Errorf("failed to create directory for database: %w", err)
+			return nil, fmt.Errorf("failed to create directory for database: %w", err)
 		}
 	}
 
 	// Create base MCP server.
 	s := server.NewMCPServer(
-		"Mnemonic MCP Server",
-		mnemonicpkg.Version,
+		"Recall MCP Server",
+		recallpkg.Version,
 		server.WithResourceCapabilities(true, true),
 		server.WithLogging(),
 		server.WithRecovery(),
@@ -72,45 +71,40 @@ func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, string, error) {
 	// Open database (WAL + NORMAL sync by default).
 	dbConn, err := pkgdb.OpenDBConnection(dbPath, true, "NORMAL")
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to open database connection: %w", err)
+		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
 	// Automatically initialize or migrate the database schema.
 	if err := pkgdb.UpgradeDB(dbConn, dbPath, pkgdb.TargetSchemaVersion); err != nil {
 		// Attempt to close the DB connection if upgrade fails.
 		dbConn.Close()
-		return nil, "", fmt.Errorf("failed to initialize/upgrade database schema for '%s': %w", dbPath, err)
+		return nil, fmt.Errorf("failed to initialize/upgrade database schema for '%s': %w", dbPath, err)
 	}
 
-	return &MnemonicMCPServer{
+	return &RecallMCPServer{
 		mcpServer: s,
 		db:        dbConn,
-		dbPath:    dbPath,
-	}, dbPath, nil
+		DbPath:    dbPath,
+	}, nil
 }
 
 // Start runs the stdio event loop. Make sure to register tools beforehand.
-func (s *MnemonicMCPServer) Start() error {
+func (s *RecallMCPServer) Start() error {
 	return server.ServeStdio(s.mcpServer)
 }
 
 // DB returns the underlying *sql.DB.
-func (s *MnemonicMCPServer) DB() *sql.DB {
+func (s *RecallMCPServer) DB() *sql.DB {
 	return s.db
 }
 
-// DBPath returns the database path used by this server.
-func (s *MnemonicMCPServer) DBPath() string {
-	return s.dbPath
-}
-
 // MCPRawServer exposes the raw mcp-go server (useful for additional configuration).
-func (s *MnemonicMCPServer) MCPRawServer() *server.MCPServer {
+func (s *RecallMCPServer) MCPRawServer() *server.MCPServer {
 	return s.mcpServer
 }
 
 // Close cleans up allocated resources.
-func (s *MnemonicMCPServer) Close() error {
+func (s *RecallMCPServer) Close() error {
 	if s.db != nil {
 		return s.db.Close()
 	}

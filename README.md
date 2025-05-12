@@ -1,4 +1,4 @@
-# mnemonic
+# recall
 A self-hostable datastore for memories to share with your AI models.
 
 ## Features
