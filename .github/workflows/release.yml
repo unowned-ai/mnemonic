@@ -85,7 +85,7 @@ jobs:
             if [ "$GOARCH" = "386" ]; then export CC="i686-w64-mingw32-gcc"; fi
           fi
 
-          go build -o "$BUILD_DIR/recall${EXTESION}" ./...
+          go build -o "$BUILD_DIR/recall${EXTESION}" ./cmd/recall
           zip -r "$BUILD_DIR.zip" "$BUILD_DIR"
 
       - name: Upload release assets for each valid (GOOS, GOARH) pair
