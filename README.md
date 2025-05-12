@@ -20,18 +20,18 @@ Download the latest binary for your platform from the releases page.
 Simply run:
 
 ```bash
-mnemonic mcp
+recall mcp
 ```
 
 This starts the MCP server using the default database location for your platform:
-- Windows: `%USERPROFILE%\AppData\Roaming\mnemonic\mnemonic.db`
-- macOS: `~/Library/Application Support/mnemonic/mnemonic.db`
-- Linux: `~/.local/share/mnemonic/mnemonic.db`
+- Windows: `%USERPROFILE%\AppData\Roaming\recall\recall.db`
+- macOS: `~/Library/Application Support/recall/recall.db`
+- Linux: `~/.local/share/recall/recall.db`
 
 You can specify a custom database path:
 
 ```bash
-mnemonic mcp --db ~/path/to/your/database.db
+recall mcp --db ~/path/to/your/database.db
 ```
 
 ### Integrating with AI Tools
