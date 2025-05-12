@@ -32,9 +32,9 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
-          - os: ubuntu-22.04
-            goos: linux
-            goarch: arm64
+          # - os: ubuntu-22.04
+          #   goos: linux
+          #   goarch: arm64
           - os: ubuntu-22.04
             goos: linux
             goarch: 386
