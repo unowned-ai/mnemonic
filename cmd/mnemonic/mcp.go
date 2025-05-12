@@ -5,25 +5,25 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/unowned-ai/mnemonic/pkg/mcp"
+	"github.com/unowned-ai/recall/pkg/mcp"
 )
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "Run the Mnemonic MCP server (stdio)",
-	Long: `Start a Model Context Protocol (MCP) server that exposes all mnemonic
+	Short: "Run the Recall MCP server (stdio)",
+	Long: `Start a Model Context Protocol (MCP) server that exposes all recall
 journals, entries, tags and search functionality as MCP tools via STDIO.
 
 Example:
 
-  mnemonic mcp --db mnemonic.db | tee server.log`,
+  recall mcp --db recall.db | tee server.log`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if dbPath == "" {
 			return fmt.Errorf("database path is required (use --db flag)")
 		}
 
 		// Create server wrapper.
-		srv, err := mcp.NewMnemonicMCPServer(dbPath)
+		srv, err := mcp.NewRecallMCPServer(dbPath)
 		if err != nil {
 			return err
 		}
@@ -49,7 +49,7 @@ Example:
 		mcp.RegisterSearchEntriesTool(s, db)
 
 		// Log to stderr so we don't contaminate the JSON-RPC stream on stdout.
-		fmt.Fprintf(os.Stderr, "Mnemonic MCP server started. DB: %s\n", dbPath)
+		fmt.Fprintf(os.Stderr, "Recall MCP server started. DB: %s\n", dbPath)
 		fmt.Fprintln(os.Stderr, "Available tools: ping, create_journal, list_journals, get_journal, update_journal, delete_journal, create_entry, list_entries, get_entry, update_entry, delete_entry, manage_entry_tags, list_tags, search_entries")
 		fmt.Fprintln(os.Stderr, "Listening for MCP JSON-RPC on STDIN/STDOUT ... (Ctrl+C to quit)")
 

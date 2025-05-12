@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	// No longer importing mnemonicsync "github.com/unowned-ai/mnemonic/pkg"
+	// No longer importing recallsync "github.com/unowned-ai/recall/pkg"
 	// Will remove later if not needed, good for initial dev
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
@@ -21,7 +21,7 @@ const (
 // GetComponentSchemaVersion retrieves the schema version for a given component.
 // Returns 0 if the component is not found, the versions table is uninitialized, or the table doesn't exist.
 func GetComponentSchemaVersion(db *sql.DB, componentName string) (int64, error) {
-	query := `SELECT version FROM mnemonic_versions WHERE component = ?;`
+	query := `SELECT version FROM recall_versions WHERE component = ?;`
 	row := db.QueryRow(query, componentName)
 
 	var version int64
@@ -32,8 +32,8 @@ func GetComponentSchemaVersion(db *sql.DB, componentName string) (int64, error) 
 			return 0, nil
 		}
 		// Check if the error is due to the table not existing
-		if strings.Contains(err.Error(), "no such table") && strings.Contains(err.Error(), "mnemonic_versions") {
-			// mnemonic_versions table itself doesn't exist, so definitely version 0.
+		if strings.Contains(err.Error(), "no such table") && strings.Contains(err.Error(), "recall_versions") {
+			// recall_versions table itself doesn't exist, so definitely version 0.
 			return 0, nil
 		}
 		// Another error occurred during scan.
@@ -53,7 +53,7 @@ func InitializeSchema(db *sql.DB, schemaVersionToSet int64) error {
 
 	// Insert or update the version for the memoriesdb component
 	insertVersionSQL := `
-INSERT INTO mnemonic_versions (component, version) VALUES (?, ?)
+INSERT INTO recall_versions (component, version) VALUES (?, ?)
 ON CONFLICT(component) DO UPDATE SET version = excluded.version, created_at = unixepoch();`
 
 	_, err = db.Exec(insertVersionSQL, MemoriesDBComponent, schemaVersionToSet)

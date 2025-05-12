@@ -1,13 +1,13 @@
 .PHONY: clean build rebuild test
 
-build: bin/mnemonic
+build: bin/recall
 
 rebuild: clean build
 
-bin/mnemonic:
+bin/recall:
 	mkdir -p bin
 	go mod tidy
-	go build -o bin/mnemonic ./cmd/mnemonic
+	go build -o bin/recall ./cmd/recall
 
 clean:
 	rm -rf bin/*

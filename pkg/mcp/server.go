@@ -5,26 +5,26 @@ import (
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/server"
-	mnemonicpkg "github.com/unowned-ai/mnemonic/pkg"
-	pkgdb "github.com/unowned-ai/mnemonic/pkg/db"
+	recallpkg "github.com/unowned-ai/recall/pkg"
+	pkgdb "github.com/unowned-ai/recall/pkg/db"
 )
 
-// MnemonicMCPServer wraps the MCP server with a database handle.
-type MnemonicMCPServer struct {
+// RecallMCPServer wraps the MCP server with a database handle.
+type RecallMCPServer struct {
 	mcpServer *server.MCPServer
 	db        *sql.DB
 	dbPath    string
 }
 
-// NewMnemonicMCPServer spins up an MCP server backed by the SQLite database at dbPath.
-func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
+// NewRecallMCPServer spins up an MCP server backed by the SQLite database at dbPath.
+func NewRecallMCPServer(dbPath string) (*RecallMCPServer, error) {
 	if dbPath == "" {
-		return nil, fmt.Errorf("database path cannot be empty for MnemonicMCPServer")
+		return nil, fmt.Errorf("database path cannot be empty for RecallMCPServer")
 	}
 	// Create base MCP server.
 	s := server.NewMCPServer(
-		"Mnemonic MCP Server",
-		mnemonicpkg.Version,
+		"Recall MCP Server",
+		recallpkg.Version,
 		server.WithResourceCapabilities(true, true),
 		server.WithLogging(),
 		server.WithRecovery(),
@@ -36,7 +36,7 @@ func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
-	return &MnemonicMCPServer{
+	return &RecallMCPServer{
 		mcpServer: s,
 		db:        dbConn,
 		dbPath:    dbPath,
@@ -44,22 +44,22 @@ func NewMnemonicMCPServer(dbPath string) (*MnemonicMCPServer, error) {
 }
 
 // Start runs the stdio event loop. Make sure to register tools beforehand.
-func (s *MnemonicMCPServer) Start() error {
+func (s *RecallMCPServer) Start() error {
 	return server.ServeStdio(s.mcpServer)
 }
 
 // DB returns the underlying *sql.DB.
-func (s *MnemonicMCPServer) DB() *sql.DB {
+func (s *RecallMCPServer) DB() *sql.DB {
 	return s.db
 }
 
 // MCPRawServer exposes the raw mcp-go server (useful for additional configuration).
-func (s *MnemonicMCPServer) MCPRawServer() *server.MCPServer {
+func (s *RecallMCPServer) MCPRawServer() *server.MCPServer {
 	return s.mcpServer
 }
 
 // Close cleans up allocated resources.
-func (s *MnemonicMCPServer) Close() error {
+func (s *RecallMCPServer) Close() error {
 	if s.db != nil {
 		return s.db.Close()
 	}
