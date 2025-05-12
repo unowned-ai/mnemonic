@@ -62,12 +62,12 @@ jobs:
 
       - name: Install cross-compilation tools
         env:
-          GOOS: ${{ matrix.goos }}
+          OS: ${{ matrix.os }}
         run: |
-          if [ "$GOOS" = "ubuntu-22.04" ]; then
+          if [ "$OS" = "ubuntu-22.04" ]; then
             sudo apt update
             sudo apt install -y gcc g++ gcc-multilib g++-multilib mingw-w64 libc6-dev-i386
-          elif [ "$GOOS" = "ubuntu-latest" ]; then
+          elif [ "$OS" = "ubuntu-latest" ]; then
             sudo apt update
             sudo apt install -y gcc mingw-w64
           fi
