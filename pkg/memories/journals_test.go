@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/unowned-ai/mnemonic/pkg/db"
+	"github.com/unowned-ai/recall/pkg/db"
 )
 
 func setupTestDB(t *testing.T) *sql.DB {

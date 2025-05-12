@@ -9,7 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/unowned-ai/mnemonic/pkg/memories"
+	"github.com/unowned-ai/recall/pkg/memories"
 )
 
 const DefaultJournalName = "memory"
@@ -18,10 +18,10 @@ const DefaultJournalName = "memory"
 func RegisterPingTool(s *server.MCPServer) {
 	pingTool := mcp.NewTool(
 		"ping",
-		mcp.WithDescription("Responds with 'pong' to verify the Mnemonic MCP server is alive."),
+		mcp.WithDescription("Responds with 'pong' to verify the Recall MCP server is alive."),
 	)
 	s.AddTool(pingTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return mcp.NewToolResultText("pong_mnemonic"), nil
+		return mcp.NewToolResultText("pong_recall"), nil
 	})
 }
 

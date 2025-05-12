@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/google/uuid"
-	"github.com/unowned-ai/mnemonic/pkg/memories"
+	"github.com/unowned-ai/recall/pkg/memories"
 )
 
 // getJournalByName searches for a journal by its name. If not found, it returns nil, nil.

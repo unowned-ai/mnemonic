@@ -42,7 +42,7 @@ func TestUpgradeDB_NewDatabase(t *testing.T) {
 	}
 
 	// Verify all tables are created
-	expectedTables := []string{"mnemonic_versions", "journals", "entries", "tags", "entry_tags"}
+	expectedTables := []string{"recall_versions", "journals", "entries", "tags", "entry_tags"}
 	for _, tableName := range expectedTables {
 		checkTableExists(t, db, tableName)
 	}

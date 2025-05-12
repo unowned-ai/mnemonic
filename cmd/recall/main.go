@@ -6,17 +6,17 @@ import (
 	"os"
 	"strings"
 
-	mnemonic "github.com/unowned-ai/mnemonic/pkg"
-	pkgdb "github.com/unowned-ai/mnemonic/pkg/db"
+	recall "github.com/unowned-ai/recall/pkg"
+	pkgdb "github.com/unowned-ai/recall/pkg/db"
 
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "mnemonic",
+	Use:     "recall",
 	Short:   "A self-hostable datastore for your memories to share with your AI models.",
 	Long:    ``,
-	Version: fmt.Sprintf("v%s", mnemonic.Version),
+	Version: fmt.Sprintf("v%s", recall.Version),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// This is a good place to ensure dbPath is usable if needed globally before RunE
 		// For now, openDB handles the check.
@@ -31,7 +31,7 @@ var completionShells = []string{"bash", "zsh", "fish", "powershell"}
 var completionCmd = &cobra.Command{
 	Use:   fmt.Sprintf("completion %s", strings.Join(completionShells, "|")),
 	Short: "Generate shell completion scripts",
-	Long: `Generate shell completion scripts for mnemonic.
+	Long: `Generate shell completion scripts for recall.
 
 The command prints a completion script to stdout. You can source it in your shell
 or install it to the appropriate location for your shell to enable completions permanently.
@@ -39,20 +39,20 @@ or install it to the appropriate location for your shell to enable completions p
 Examples:
 
   Bash (current shell):
-    $ source <(mnemonic completion bash)
+    $ source <(recall completion bash)
 
   Bash (persist):
-    $ mnemonic completion bash > /etc/bash_completion.d/mnemonic
+    $ recall completion bash > /etc/bash_completion.d/recall
 
   Zsh:
-    $ mnemonic completion zsh > "${fpath[1]}/_mnemonic"
+    $ recall completion zsh > "${fpath[1]}/_recall"
 
   Fish:
-    $ mnemonic completion fish | source
-    $ mnemonic completion fish > ~/.config/fish/completions/mnemonic.fish
+    $ recall completion fish | source
+    $ recall completion fish > ~/.config/fish/completions/recall.fish
 
   PowerShell:
-    PS> mnemonic completion powershell | Out-String | Invoke-Expression`,
+    PS> recall completion powershell | Out-String | Invoke-Expression`,
 	DisableFlagsInUseLine: true,
 	ValidArgs:             completionShells,
 	Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
@@ -74,22 +74,22 @@ Examples:
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Print the version number of mnemonic",
-	Long:  `All software has versions. This is mnemonic's`,
+	Short: "Print the version number of recall",
+	Long:  `All software has versions. This is recall's`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(mnemonic.Version)
+		fmt.Println(recall.Version)
 	},
 }
 
 var dbCmd = &cobra.Command{
 	Use:   "db",
-	Short: "Manage the Mnemonic database",
-	Long:  `Provides commands for managing the Mnemonic SQLite database, including schema upgrades. GIGO.`,
+	Short: "Manage the recall database",
+	Long:  `Provides commands for managing the Recall SQLite database, including schema upgrades. GIGO.`,
 }
 
 var dbUpgradeCmd = &cobra.Command{
 	Use:   "upgrade",
-	Short: "Upgrade the Mnemonic database schema to the latest version for the memoriesdb component",
+	Short: "Upgrade the Recall database schema to the latest version for the memoriesdb component",
 	Long: `Connects to the SQLite database at the specified path (provided with the --db flag) and applies any necessary
 schema migrations to bring the memoriesdb component up to the current application schema version.
 If the database does not exist or is uninitialized for this component, it will be created

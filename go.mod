@@ -1,4 +1,4 @@
-module github.com/unowned-ai/mnemonic
+module github.com/unowned-ai/recall
 
 go 1.24.2
 

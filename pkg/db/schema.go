@@ -4,7 +4,7 @@ const (
 	// SchemaV1 defines the SQL statements for version 1 of the database schema.
 	// This schema pertains to the 'memoriesdb' component.
 	SchemaV1 = `
-CREATE TABLE IF NOT EXISTS mnemonic_versions (
+CREATE TABLE IF NOT EXISTS recall_versions (
     component VARCHAR(64) PRIMARY KEY,
     version INTEGER NOT NULL,
     created_at REAL DEFAULT (unixepoch())
