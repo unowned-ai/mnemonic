@@ -349,14 +349,14 @@ func (m model) View() string {
 		if m.currentEntry.ID != uuid.Nil {
 			rightBuilder.WriteString(
 				lipgloss.NewStyle().Bold(true).
-					Render(m.currentEntry.Title) + "\n")
+					Render("Title: " + m.currentEntry.Title) + "\n\n")
 
 			// Tags for the entry
 			tagsLine := "Tags: "
 			if len(m.tags) > 0 {
 				tags := []string{}
 				for _, tag := range m.tags {
-					tags = append(tags, "#"+tag.Tag)
+					tags = append(tags, tag.Tag)
 				}
 				tagsLine += strings.Join(tags, " ")
 			} else {
