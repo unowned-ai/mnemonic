@@ -28,7 +28,7 @@ Example:
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// Create server wrapper.
-		srv, err := mcp.NewRecallMCPServer(dbPath)
+		srv, err := mcp.NewRecallMCPServer(dbPath, walMode, syncMode)
 		if err != nil {
 			return err
 		}

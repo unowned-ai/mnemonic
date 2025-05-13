@@ -38,7 +38,8 @@ type RecallMCPServer struct {
 }
 
 // NewRecallMCPServer spins up an MCP server backed by the SQLite database at dbPath.
-func NewRecallMCPServer(dbPath string) (*RecallMCPServer, error) {
+// It now accepts walEnabled and syncPragma to configure the DB connection.
+func NewRecallMCPServer(dbPath string, walEnabled bool, syncPragma string) (*RecallMCPServer, error) {
 	if dbPath == "" {
 		dbPath = GetDefaultDBPath()
 	}
@@ -68,8 +69,8 @@ func NewRecallMCPServer(dbPath string) (*RecallMCPServer, error) {
 		server.WithRecovery(),
 	)
 
-	// Open database (WAL + FULL).
-	dbConn, err := pkgdb.OpenDBConnection(dbPath, true, "FULL")
+	// Open database using provided WAL and sync settings.
+	dbConn, err := pkgdb.OpenDBConnection(dbPath, walEnabled, syncPragma)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
