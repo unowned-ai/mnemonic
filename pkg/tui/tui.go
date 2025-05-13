@@ -9,6 +9,7 @@ import (
 	textinput "github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/google/uuid"
 	"github.com/unowned-ai/recall/pkg/memories"
 )
 
@@ -16,7 +17,7 @@ import (
 // Color palette "Blue Moon" from https://gogh-co.github.io/Gogh/
 const (
 	colorBorder = "#353b52"
-	colorError = "#e61f44"
+	colorError  = "#e61f44"
 )
 
 var (
@@ -34,24 +35,29 @@ var (
 )
 
 type model struct {
-	journals []memories.Journal
-	entries  []memories.Entry
-	tags     []memories.EntryTag
+	journals     []memories.Journal
+	entries      []memories.Entry
+	tags         []memories.Tag
+	currentEntry memories.Entry // Currently loaded entry detail
 
-	cursor int // Current selection 0-based index into journals slice
-	width  int // Current terminal width (for layout)
-	height int // Current terminal height
-	err    error
+	columnFocus int // 0 = journals, 1 = entries, 2 = entry
+	width       int // Current terminal width (for layout)
+	height      int // Current terminal height
+	err         error
 
 	db *sql.DB
 
 	quitting bool
 
+	journalCursor        int // Index of selected journal
 	journalCreating      bool
 	journalCreatingStep  int // 0 = editing journal name, 1 = editing journal description
 	journalCreatingError string
 	journalNameInput     textinput.Model
 	journalDescInput     textinput.Model
+
+	entryCursor int // Index of selected entry
+	// entryCreating ...
 }
 
 func initialModel(db *sql.DB) model {
@@ -68,16 +74,22 @@ func initialModel(db *sql.DB) model {
 	jtdesc.Width = 30
 
 	return model{
-		journals: []memories.Journal{},
+		journals:     []memories.Journal{},
+		entries:      []memories.Entry{},
+		tags:         []memories.Tag{},
+		currentEntry: memories.Entry{},
 
-		cursor: 0,
-		width:  0,
-		height: 0,
+		columnFocus: 0,
+		width:       0,
+		height:      0,
 
 		db: db,
 
+		journalCursor:    0,
 		journalNameInput: jtin,
 		journalDescInput: jtdesc,
+
+		entryCursor: 0,
 	}
 }
 
@@ -103,6 +115,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// When journals are loaded from DB, store them in model
 		// TODO: Re-load if journal list updated outside
 		m.journals = msg
+		if len(m.journals) > 0 {
+			// Load entries for the first journal
+			return m, loadEntries(m.db, m.journals[0].ID, false)
+		}
+		return m, nil
+
+	case []memories.Entry:
+		// Store loaded entries for the currently selected journal
+		m.entries = msg
+		// Reset entry selection and clear any previously loaded entry detail
+		m.entryCursor = 0
+		m.currentEntry = memories.Entry{}
+		m.tags = []memories.Tag{}
+		return m, nil
+
+	case entryDetailMsg:
+		// Store the full entry and tags in the model for the detail view
+		m.currentEntry = msg.entry
+		m.tags = msg.tags
 		return m, nil
 
 	// Handle key presses for navigation and input
@@ -132,7 +163,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						// Prepend new journal to the list and focus it
 						m.journals = append([]memories.Journal{journal}, m.journals...)
-						m.cursor = 0 // highlight the newly created journal
+						m.journalCursor = 0 // highlight the newly created journal
 					}
 					// Exit create mode and reset form inputs
 					m.journalCreating = false
@@ -166,15 +197,51 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "up", "k":
 			// Move selection up (stop at top)
-			if m.cursor > 0 {
-				m.cursor--
+			if m.columnFocus == 0 && m.journalCursor > 0 {
+				// Iterating over journals column
+				m.journalCursor--
+				return m, loadEntries(m.db, m.journals[m.journalCursor].ID, false)
+			}
+			if m.columnFocus == 1 && m.entryCursor > 0 {
+				// Iterating over entries column
+				m.entryCursor--
+				return m, loadEntryDetail(m.db, m.entries[m.entryCursor].ID)
 			}
 
 		case "down", "j":
 			// Move selection down (stop at last item)
-			if m.cursor < len(m.journals)-1 {
-				m.cursor++
+			if m.columnFocus == 0 && m.journalCursor < len(m.journals)-1 {
+				// Iterating over journals column
+				m.journalCursor++
+				return m, loadEntries(m.db, m.journals[m.journalCursor].ID, false)
 			}
+
+			if m.columnFocus == 1 && m.entryCursor < len(m.entries)-1 {
+				// Iterating over entries column
+				m.entryCursor++
+				return m, loadEntryDetail(m.db, m.entries[m.entryCursor].ID)
+			}
+
+		case "right", "l":
+			// Move selection right to other column
+			if m.columnFocus < 2 {
+				m.columnFocus++
+			}
+			var cmd tea.Cmd
+			if m.columnFocus == 1 && len(m.entries) > 0 {
+				// Moved focus to entries - auto-select the first entry and load it
+				m.entryCursor = 0
+				cmd = loadEntryDetail(m.db, m.entries[0].ID)
+			}
+			return m, cmd
+
+		case "left", "h":
+			// Move selection left to other column
+			if m.columnFocus > 0 {
+				m.columnFocus--
+			}
+
+			return m, nil
 
 		case "n":
 			m.journalCreating = true
@@ -225,7 +292,7 @@ func (m model) View() string {
 			// Default: no pointer, inactive (grey) text
 			pointer := "  "
 			itemStyle := inactiveStyle
-			if m.cursor == i {
+			if m.journalCursor == i {
 				// Highlighted journal (cursor position)
 				pointer = "> "
 				itemStyle = selectedStyle
@@ -240,11 +307,26 @@ func (m model) View() string {
 
 	// Middle column: Entries list (placeholder)
 	var middleBuilder strings.Builder
-	if m.cursor <= len(m.journals) {
-		// If a journal is selected, show dummy entries for that journal
-		middleBuilder.WriteString(" Entry 1\n")
-		middleBuilder.WriteString(" Entry 2\n")
-		middleBuilder.WriteString(" Entry 3\n")
+	if m.journalCursor <= len(m.journals) {
+		// If a journal is selected
+		if len(m.entries) == 0 {
+			middleBuilder.WriteString("No entries yet.\n")
+		} else {
+			for i, entry := range m.entries {
+				pointer := "  "
+				itemStyle := inactiveStyle
+				if i == m.entryCursor && m.columnFocus != 0 {
+					// Selected entry is highlighted; pointer if entries column is focused
+					if m.columnFocus == 1 {
+						pointer = "> "
+					}
+					// TODO: Handle if we focus 3rd column entry editor, not reduce selected entry highlight
+					itemStyle = selectedStyle
+				}
+				title := entry.Title
+				middleBuilder.WriteString(pointer + itemStyle.Render(title) + "\n")
+			}
+		}
 	} else {
 		// No journal selected (e.g., currently on "+ New Journal")
 		middleBuilder.WriteString("No journal selected.\n")
@@ -263,21 +345,33 @@ func (m model) View() string {
 				lipgloss.NewStyle().Foreground(lipgloss.Color(colorError)).
 					Render(m.journalCreatingError) + "\n")
 		}
-	} else if len(m.journals) > 0 && m.cursor <= len(m.journals) {
-		// Show placeholder details for the selected journal's content
-		selectedJournal := m.journals[m.cursor]
-		rightBuilder.WriteString(lipgloss.NewStyle().Bold(true).
-			Render(selectedJournal.Name) + "\n")
-		// Example metadata (date/URL placeholders)
-		rightBuilder.WriteString(fmt.Sprintf("created_at: %s\n\n",
-			"2025-05-13"))
-		// Example content preview (summary and key points placeholders)
-		rightBuilder.WriteString("Title: Entry 1\n\n")
-		rightBuilder.WriteString("Tags: #tag1 #tag3\n\n")
-		rightBuilder.WriteString("Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
+	} else if len(m.journals) > 0 && m.journalCursor <= len(m.journals) {
+		if m.currentEntry.ID != uuid.Nil {
+			rightBuilder.WriteString(
+				lipgloss.NewStyle().Bold(true).
+					Render(m.currentEntry.Title) + "\n")
+
+			// Tags for the entry
+			tagsLine := "Tags: "
+			if len(m.tags) > 0 {
+				tags := []string{}
+				for _, tag := range m.tags {
+					tags = append(tags, "#"+tag.Tag)
+				}
+				tagsLine += strings.Join(tags, " ")
+			} else {
+				tagsLine += "-"
+			}
+			rightBuilder.WriteString(tagsLine + "\n\n")
+
+			// Entry content
+			rightBuilder.WriteString(m.currentEntry.Content)
+		} else {
+			rightBuilder.WriteString("[ Select an entry to view details ]")
+		}
 	} else {
 		// Nothing to preview (no journal selected)
-		rightBuilder.WriteString("[ Select an entry to view details ]")
+		rightBuilder.WriteString("[ Select a journal to view details ]")
 	}
 
 	// Apply styles and borders to each column
@@ -312,14 +406,45 @@ func (m model) View() string {
 	return titleBar + "\n" + columns + footer
 }
 
+// Load journals from the database
 func loadJournals(db *sql.DB) tea.Cmd {
-	// Asynchronously load journals from the database
 	return func() tea.Msg {
 		journals, err := memories.ListJournals(context.Background(), db, false)
 		if err != nil {
 			return err
 		}
 		return journals
+	}
+}
+
+// Load entries for journal from the database
+func loadEntries(db *sql.DB, journalID uuid.UUID, includeDeleted bool) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := memories.ListEntries(context.Background(), db, journalID, includeDeleted)
+		if err != nil {
+			return err
+		}
+		return entries
+	}
+}
+
+type entryDetailMsg struct {
+	entry memories.Entry
+	tags  []memories.Tag
+}
+
+func loadEntryDetail(db *sql.DB, entryID uuid.UUID) tea.Cmd {
+	return func() tea.Msg {
+		entry, err := memories.GetEntry(context.Background(), db, entryID)
+		if err != nil {
+			return err
+		}
+		tags, err := memories.ListTagsForEntry(context.Background(), db, entry.ID)
+		if err != nil {
+			return err
+		}
+		// Return a combined message with the entry and its tags
+		return entryDetailMsg{entry: entry, tags: tags}
 	}
 }
 
