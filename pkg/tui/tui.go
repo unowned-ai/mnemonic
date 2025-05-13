@@ -15,7 +15,8 @@ import (
 // UI styles and layout settings
 // Color palette "Blue Moon" from https://gogh-co.github.io/Gogh/
 const (
-	borderColor = "#353b52"
+	colorBorder = "#353b52"
+	colorError = "#e61f44"
 )
 
 var (
@@ -28,7 +29,7 @@ var (
 			Background(lipgloss.Color("#8796b0"))
 	inactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8796b0"))
 	// Specific border styles will be defined for panels in the View function
-	hRule = lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor)).
+	hRule = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBorder)).
 		Render(strings.Repeat("─", 30))
 )
 
@@ -46,10 +47,11 @@ type model struct {
 
 	quitting bool
 
-	journalCreating     bool
-	journalCreatingStep int // 0 = editing journal name, 1 = editing journal description
-	journalNameInput    textinput.Model
-	journalDescInput    textinput.Model
+	journalCreating      bool
+	journalCreatingStep  int // 0 = editing journal name, 1 = editing journal description
+	journalCreatingError string
+	journalNameInput     textinput.Model
+	journalDescInput     textinput.Model
 }
 
 func initialModel(db *sql.DB) model {
@@ -110,8 +112,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.Type {
 			case tea.KeyEnter:
 				if m.journalCreatingStep == 0 {
+					// Validate that the journal name is not empty
+					if m.journalNameInput.Value() == "" {
+						m.journalCreatingError = "Journal name cannot be empty"
+						return m, nil
+					}
+
 					// Press Enter on name field -> move to description field
-					// TODO: Verify if name is not empty
+					m.journalCreatingError = ""
 					m.journalCreatingStep = 1
 					m.journalNameInput.Blur()
 					m.journalDescInput.Focus()
@@ -153,7 +161,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.quitting = true
-			return m, tea.Quit
+			// Exit alt screen before quitting so the goodbye message displays
+			return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 
 		case "up", "k":
 			// Move selection up (stop at top)
@@ -248,6 +257,12 @@ func (m model) View() string {
 		rightBuilder.WriteString("Name: " + m.journalNameInput.View() + "\n")
 		rightBuilder.WriteString("Description: " + m.journalDescInput.View() + "\n\n")
 		rightBuilder.WriteString("(enter to submit, esc to cancel)")
+
+		if m.journalCreatingError != "" {
+			rightBuilder.WriteString("\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color(colorError)).
+					Render(m.journalCreatingError) + "\n")
+		}
 	} else if len(m.journals) > 0 && m.cursor <= len(m.journals) {
 		// Show placeholder details for the selected journal's content
 		selectedJournal := m.journals[m.cursor]
@@ -269,7 +284,7 @@ func (m model) View() string {
 	// Left panel: border on the right side only (vertical separator)
 	leftPanelStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
-		BorderForeground(lipgloss.Color(borderColor)).
+		BorderForeground(lipgloss.Color(colorBorder)).
 		Padding(1, 2)
 	leftPanel := leftPanelStyle.Width(leftWidth).Height(m.height - 2).
 		Render(leftBuilder.String())
@@ -277,7 +292,7 @@ func (m model) View() string {
 	// Middle panel: border on the right side only
 	middlePanelStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
-		BorderForeground(lipgloss.Color(borderColor)).
+		BorderForeground(lipgloss.Color(colorBorder)).
 		Padding(1, 2)
 	middlePanel := middlePanelStyle.Width(middleWidth).Height(m.height - 2).
 		Render(middleBuilder.String())

@@ -1,8 +1,9 @@
 //go:build tui
+
 package main
 
 import (
-    "github.com/unowned-ai/recall/pkg/tui"
+	"github.com/unowned-ai/recall/pkg/tui"
 
 	"github.com/spf13/cobra"
 )
