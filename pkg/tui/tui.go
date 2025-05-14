@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	textinput "github.com/charmbracelet/bubbles/textinput"
@@ -18,6 +20,10 @@ import (
 const (
 	colorBorder = "#353b52"
 	colorError  = "#e61f44"
+
+	colorGreen    = "#acfab4"
+	colorGreenDim = "#b4c4b4"
+	colorRedDim   = "#d06178"
 )
 
 var (
@@ -26,12 +32,12 @@ var (
 			Background(lipgloss.Color("#353b52")).
 			Padding(0, 2).Align(lipgloss.Center)
 	selectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#ffffff")).
-			Background(lipgloss.Color("#8796b0"))
-	inactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8796b0"))
+			Foreground(lipgloss.Color("#353b52")).
+			Background(lipgloss.Color(colorGreen))
+	inactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff"))
 	// Specific border styles will be defined for panels in the View function
-	hRule = lipgloss.NewStyle().Foreground(lipgloss.Color(colorBorder)).
-		Render(strings.Repeat("─", 30))
+	footerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(colorBorder))
 )
 
 type model struct {
@@ -45,7 +51,10 @@ type model struct {
 	height      int // Current terminal height
 	err         error
 
-	db *sql.DB
+	mcpUsage bool
+
+	db         *sql.DB
+	dbFilename string
 
 	quitting bool
 
@@ -73,6 +82,15 @@ func initialModel(db *sql.DB) model {
 	jtdesc.CharLimit = 128
 	jtdesc.Width = 30
 
+	// Fetch database file path with name
+	var name, file string
+	err := db.QueryRow(`PRAGMA database_list`).Scan(new(int), &name, &file)
+	if err != nil {
+		return model{}
+	}
+
+	fileName := filepath.Base(file)
+
 	return model{
 		journals:     []memories.Journal{},
 		entries:      []memories.Entry{},
@@ -83,7 +101,10 @@ func initialModel(db *sql.DB) model {
 		width:       0,
 		height:      0,
 
-		db: db,
+		mcpUsage: false,
+
+		db:         db,
+		dbFilename: fileName,
 
 		journalCursor:    0,
 		journalNameInput: jtin,
@@ -227,13 +248,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.columnFocus < 2 {
 				m.columnFocus++
 			}
-			var cmd tea.Cmd
 			if m.columnFocus == 1 && len(m.entries) > 0 {
 				// Moved focus to entries - auto-select the first entry and load it
 				m.entryCursor = 0
-				cmd = loadEntryDetail(m.db, m.entries[0].ID)
 			}
-			return m, cmd
+			return m, loadEntryDetail(m.db, m.entries[0].ID)
 
 		case "left", "h":
 			// Move selection left to other column
@@ -281,11 +300,15 @@ func (m model) View() string {
 	middleWidth := halfWidth - leftWidth
 	rightWidth := m.width - (leftWidth + middleWidth)
 
-	// Left column: Journals list + Tags
-	var leftBuilder strings.Builder
+	// Left column: Journals list and Info
+	var journalsBuilder, infoBuilder strings.Builder
 
+	// Calculate heights for the split panels (subtract 4 for borders and padding)
+	quarterHeight := (m.height - 4) / 4
+
+	// Build journals section
 	if len(m.journals) == 0 {
-		leftBuilder.WriteString("No journals yet. Press 'n' to create new.\n")
+		journalsBuilder.WriteString("No journals yet. Press 'n' to create new.\n")
 	} else {
 		// List each journal in the left column
 		for i, journal := range m.journals {
@@ -297,15 +320,43 @@ func (m model) View() string {
 				pointer = "> "
 				itemStyle = selectedStyle
 			}
-			leftBuilder.WriteString(pointer + itemStyle.Render(journal.Name) + "\n")
+			journalsBuilder.WriteString(pointer + itemStyle.Render(journal.Name) + "\n")
 		}
 	}
 
-	// Tags section (placeholder tags list)
-	leftBuilder.WriteString("\n" + hRule + "\n")
-	leftBuilder.WriteString("Tags:\n#tag1\n#tag2\n#tag3\n")
+	// Build info section
+	var mcpServerStatus, databaseStatus int
+	if m.mcpUsage {
+		mcpServerStatus = 1
+	}
+	if m.dbFilename != "" {
+		databaseStatus = 1
+	}
 
-	// Middle column: Entries list (placeholder)
+	infoBuilder.WriteString(fmt.Sprintf("MCP server status: %v\nDatabase file: %v\n",
+		TextStatusColorize(strconv.FormatBool(m.mcpUsage), mcpServerStatus),
+		TextStatusColorize(m.dbFilename, databaseStatus)))
+
+	// Style and render the journals panel (top)
+	journalsPanelStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, true, true, false).
+		BorderForeground(lipgloss.Color(colorBorder)).
+		Padding(1, 2)
+	journalsPanel := journalsPanelStyle.Width(leftWidth).Height(quarterHeight * 3).
+		Render(journalsBuilder.String())
+
+	// Style and render the info panel (bottom)
+	infoPanelStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, true, false, false).
+		BorderForeground(lipgloss.Color(colorBorder)).
+		Padding(1, 2)
+	infoPanel := infoPanelStyle.Width(leftWidth).Height(quarterHeight).
+		Render(infoBuilder.String())
+
+	// Combine the panels vertically
+	leftPanel := lipgloss.JoinVertical(lipgloss.Left, journalsPanel, infoPanel)
+
+	// Middle column: Entries list
 	var middleBuilder strings.Builder
 	if m.journalCursor <= len(m.journals) {
 		// If a journal is selected
@@ -349,7 +400,7 @@ func (m model) View() string {
 		if m.currentEntry.ID != uuid.Nil {
 			rightBuilder.WriteString(
 				lipgloss.NewStyle().Bold(true).
-					Render("Title: " + m.currentEntry.Title) + "\n\n")
+					Render("Title: "+m.currentEntry.Title) + "\n\n")
 
 			// Tags for the entry
 			tagsLine := "Tags: "
@@ -367,43 +418,44 @@ func (m model) View() string {
 			// Entry content
 			rightBuilder.WriteString(m.currentEntry.Content)
 		} else {
-			rightBuilder.WriteString("[ Select an entry to view details ]")
+			rightBuilder.WriteString("Select an entry to view details.")
 		}
 	} else {
 		// Nothing to preview (no journal selected)
-		rightBuilder.WriteString("[ Select a journal to view details ]")
+		rightBuilder.WriteString("Select a journal to view details.")
 	}
 
-	// Apply styles and borders to each column
-	// Left panel: border on the right side only (vertical separator)
+	// Left panel: border on the right side and horizontal split to journal list and info section
 	leftPanelStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(lipgloss.Color(colorBorder)).
 		Padding(1, 2)
-	leftPanel := leftPanelStyle.Width(leftWidth).Height(m.height - 2).
-		Render(leftBuilder.String())
+	leftPanelStyle.Width(leftWidth).Height(m.height - 3).
+		Render(leftPanel)
 
 	// Middle panel: border on the right side only
 	middlePanelStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(lipgloss.Color(colorBorder)).
 		Padding(1, 2)
-	middlePanel := middlePanelStyle.Width(middleWidth).Height(m.height - 2).
+	middlePanel := middlePanelStyle.Width(middleWidth).Height(m.height - 3).
 		Render(middleBuilder.String())
 
 	// Right panel: no border (open content area)
 	rightPanelStyle := lipgloss.NewStyle().Padding(1, 2)
-	rightPanel := rightPanelStyle.Width(rightWidth).Height(m.height - 2).
+	rightPanel := rightPanelStyle.Width(rightWidth).Height(m.height - 3).
 		Render(rightBuilder.String())
 
 	// Join the three panels horizontally (top aligned)
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, middlePanel, rightPanel)
 
 	// Footer with usage instructions
-	footer := "\n↑/↓ to navigate • Enter to select • n to create • q to quit"
+	footerText := "\n↑/↓ to navigate • Enter to select • n to create • q to quit"
+	// Render the footer bar (full width)
+	footerBar := footerStyle.Width(m.width).Render(footerText)
 
 	// Assemble final UI string
-	return titleBar + "\n" + columns + footer
+	return titleBar + "\n\n" + columns + footerBar
 }
 
 // Load journals from the database
@@ -445,6 +497,19 @@ func loadEntryDetail(db *sql.DB, entryID uuid.UUID) tea.Cmd {
 		}
 		// Return a combined message with the entry and its tags
 		return entryDetailMsg{entry: entry, tags: tags}
+	}
+}
+
+// Function to colorize text based on its status
+// 0 (default) - unknown, 1 - green, 2 - red
+func TextStatusColorize(text string, status int) string {
+	switch status {
+	case 1:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreenDim)).Render(text)
+	case 2:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(colorRedDim)).Render(text)
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(colorBorder)).Render(text)
 	}
 }
 
