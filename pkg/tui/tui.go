@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	textinput "github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,6 +25,8 @@ const (
 	colorGreen    = "#acfab4"
 	colorGreenDim = "#b4c4b4"
 	colorRedDim   = "#d06178"
+
+	marqueeTickDuration = time.Duration(time.Second / 20)
 )
 
 var (
@@ -66,7 +69,11 @@ type model struct {
 	journalDescInput     textinput.Model
 
 	entryCursor int // Index of selected entry
-	// entryCreating ...
+	// entryCreating
+
+	// Animation state
+	marqueeOffset int
+	marqueeTimer  int
 }
 
 func initialModel(db *sql.DB) model {
@@ -111,12 +118,20 @@ func initialModel(db *sql.DB) model {
 		journalDescInput: jtdesc,
 
 		entryCursor: 0,
+
+		// Initialize animation state
+		marqueeOffset: 0,
+		marqueeTimer:  0,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	// Load journals from database on initialization
-	return loadJournals(m.db)
+	return tea.Batch(
+		loadJournals(m.db),
+		tea.Tick(marqueeTickDuration, func(t time.Time) tea.Msg {
+			return t
+		}),
+	)
 }
 
 // Processes events like window resize, errors, loaded data, and key presses
@@ -250,9 +265,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.columnFocus == 1 && len(m.entries) > 0 {
 				// Moved focus to entries - auto-select the first entry and load it
-				m.entryCursor = 0
+
 			}
-			return m, loadEntryDetail(m.db, m.entries[0].ID)
+			if len(m.entries) > 0 {
+				if m.columnFocus == 1 {
+					m.entryCursor = 0
+				}
+				return m, loadEntryDetail(m.db, m.entries[0].ID)
+			}
+
+			return m, nil
 
 		case "left", "h":
 			// Move selection left to other column
@@ -272,6 +294,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// "Enter" on selection (future functionality):
 			// Currently, highlighting a journal auto-displays its entries, so no action needed.
 		}
+
+	case time.Time:
+		// Update marquee animation every 10 ticks (adjust for speed)
+		m.marqueeTimer++
+		if m.marqueeTimer >= 10 {
+			m.marqueeTimer = 0
+			m.marqueeOffset++
+		}
+		return m, tea.Tick(marqueeTickDuration, func(t time.Time) tea.Msg {
+			return t
+		})
 	}
 
 	return m, nil
@@ -312,28 +345,42 @@ func (m model) View() string {
 	} else {
 		// List each journal in the left column
 		for i, journal := range m.journals {
-			// Default: no pointer, inactive (grey) text
 			pointer := "  "
 			itemStyle := inactiveStyle
-			if m.journalCursor == i {
-				// Highlighted journal (cursor position)
-				pointer = "> "
-				itemStyle = selectedStyle
-			}
 			// Calculate available width for journal name (panel width - pointer - padding - border)
 			availableWidth := leftWidth - len(pointer) - 4 - 1
-			journalName := journal.Name
-			if len(journalName) > availableWidth {
-				if availableWidth > 3 {
-					journalName = fmt.Sprintf("%s..", journalName[:availableWidth-2]) // Minus 2 dots
+
+			if m.journalCursor == i {
+				pointer = "> "
+				itemStyle = selectedStyle
+
+				// Handle marquee animation for selected journal
+				journalName := journal.Name
+				if len(journalName) > availableWidth {
+					// Create a padded version for scrolling
+					paddedName := journalName + "    " + journalName
+					offset := m.marqueeOffset % (len(journalName) + 4) // 4 is padding space
+					if offset+availableWidth <= len(paddedName) {
+						journalName = paddedName[offset : offset+availableWidth]
+					}
 				}
+				journalName = lipgloss.NewStyle().
+					MaxWidth(availableWidth).
+					Render(journalName)
+				journalsBuilder.WriteString(pointer + itemStyle.Render(journalName) + "\n")
+			} else {
+				// Normal truncation for non-selected journals
+				journalName := journal.Name
+				if len(journalName) > availableWidth {
+					if availableWidth > 3 {
+						journalName = fmt.Sprintf("%s..", journalName[:availableWidth-2])
+					}
+				}
+				journalName = lipgloss.NewStyle().
+					MaxWidth(availableWidth).
+					Render(journalName)
+				journalsBuilder.WriteString(pointer + itemStyle.Render(journalName) + "\n")
 			}
-
-			journalName = lipgloss.NewStyle().
-				MaxWidth(availableWidth).
-				Render(journalName)
-
-			journalsBuilder.WriteString(pointer + itemStyle.Render(journalName) + "\n")
 		}
 	}
 
