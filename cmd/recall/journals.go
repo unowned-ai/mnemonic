@@ -13,9 +13,6 @@ import (
 )
 
 var (
-	dbPath     string
-	walMode    bool
-	syncMode   string
 	activeOnly bool
 )
 
