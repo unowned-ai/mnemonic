@@ -78,8 +78,9 @@ type model struct {
 	journalDeleting         bool
 	journalDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
-	entryCursor int // Index of selected entry
-	// entryCreating
+	entryCursor           int // Index of selected entry
+	entryDeleting         bool
+	entryDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
 	// Animation state
 	marqueeOffset int
@@ -184,6 +185,54 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle key presses for navigation and input
 	case tea.KeyMsg:
+		if m.entryDeleting {
+			// Deleting Entry Mode
+			switch msg.String() {
+			case "up", "k":
+				m.entryDeleteConfirmIdx = 0
+			case "down", "j":
+				m.entryDeleteConfirmIdx = 1
+			case "enter":
+				if m.entryDeleteConfirmIdx == 0 {
+					// Confirm deletion of selected entry
+					entryID := m.entries[m.entryCursor].ID
+					err := memories.DeleteEntry(context.Background(), m.db, entryID)
+					if err != nil {
+						m.err = err
+						m.entryDeleting = false
+						return m, nil
+					}
+					// Remove journal from list and adjust selection
+					oldIndex := m.journalCursor
+					m.entries = append(m.entries[:oldIndex], m.entries[oldIndex+1:]...)
+
+					m.entryDeleting = false
+
+					// Adjust cursor if we're at the end of the list now
+					if len(m.entries) > 0 {
+						if m.journalCursor >= len(m.entries) {
+							m.journalCursor = len(m.entries) - 1
+						}
+					} else {
+						// No entry remaining; clear current entry and tags
+						m.entries = []memories.Entry{}
+					}
+					return m, nil
+				} else {
+					// Cancel deletion
+					m.entryDeleting = false
+				}
+
+				return m, nil
+			case "esc":
+				// Cancel deletion on Escape
+				m.entryDeleting = false
+				return m, nil
+			}
+			return m, nil
+
+		}
+
 		if m.journalDeleting {
 			// Deleting Journal Mode
 			switch msg.String() {
@@ -350,10 +399,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.journalCreating = true
 			m.journalNameInput.Focus() // Make sure to focus the name input
 			m.journalDescInput.Blur()  // Ensure description input is not focused
+
 		case "d":
 			if m.columnFocus == 0 && len(m.journals) > 0 {
 				m.journalDeleting = true
 				m.journalDeleteConfirmIdx = 0
+			} else if m.columnFocus == 1 && len(m.entries) > 0 {
+				m.entryDeleting = true
+				m.entryDeleteConfirmIdx = 0
 			}
 			return m, nil
 
@@ -538,6 +591,9 @@ func (m model) View() string {
 	if m.journalDeleting {
 		rightBuilderSubtitleText = "Delete Journal"
 	}
+	if m.entryDeleting {
+		rightBuilderSubtitleText = "Delete Entry"
+	}
 	rightBuilder.WriteString(subtitleStyle.Width(rightWidth - bordersAndPaddingWidth).Render(rightBuilderSubtitleText))
 	rightBuilder.WriteString("\n\n")
 
@@ -558,6 +614,20 @@ func (m model) View() string {
 			Render(m.journals[m.journalCursor].Name) + "\n\n")
 		yesOpt, noOpt := "Yes", "No"
 		if m.journalDeleteConfirmIdx == 0 {
+			yesOpt = dangerSelectedStyle.Render(" >" + yesOpt)
+			noOpt = inactiveStyle.Render("  " + noOpt)
+		} else {
+			yesOpt = inactiveStyle.Render("  " + yesOpt)
+			noOpt = selectedStyle.Render(" >" + noOpt)
+		}
+		rightBuilder.WriteString(fmt.Sprintf("%s\n%s\n\n", yesOpt, noOpt))
+		rightBuilder.WriteString("(enter to confirm, esc to cancel, up/down to switch)")
+	} else if m.entryDeleting {
+		// Show delete confirmation prompt
+		rightBuilder.WriteString("Title: " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed)).
+			Render(m.entries[m.entryCursor].Title) + "\n\n")
+		yesOpt, noOpt := "Yes", "No"
+		if m.entryDeleteConfirmIdx == 0 {
 			yesOpt = dangerSelectedStyle.Render(" >" + yesOpt)
 			noOpt = inactiveStyle.Render("  " + noOpt)
 		} else {
