@@ -22,24 +22,27 @@ const (
 	colorBorder = "#353b52"
 	colorError  = "#e61f44"
 
+	colorWhite    = "#ffffff"
 	colorGreen    = "#acfab4"
 	colorGreenDim = "#b4c4b4"
 	colorRedDim   = "#d06178"
+	colorPurple   = "#b9a3eb"
+	colorBlue     = "#89ddff"
 
 	marqueeTickDuration = time.Duration(time.Second / 20)
 )
 
 var (
 	titleStyle = lipgloss.NewStyle().Bold(true).
-			Foreground(lipgloss.Color("#89ddff")).
+			Foreground(lipgloss.Color(colorBlue)).
 			Background(lipgloss.Color("#353b52")).
 			Padding(0, 2).Align(lipgloss.Center)
 	subtitleStyle = lipgloss.NewStyle().Bold(true).
-			Foreground(lipgloss.Color("#ffffff"))
+			Foreground(lipgloss.Color(colorBlue))
 	selectedStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#353b52")).
 			Background(lipgloss.Color(colorGreen))
-	inactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff"))
+	inactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite))
 	// Specific border styles will be defined for panels in the View function
 	footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorBorder))
@@ -488,10 +491,10 @@ func (m model) View() string {
 		if m.currentEntry.ID != uuid.Nil {
 			rightBuilder.WriteString(
 				lipgloss.NewStyle().Bold(true).
-					Render("Title: "+m.currentEntry.Title) + "\n\n")
+					Render(lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue)).Render("Title: ")+lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite)).Render(m.currentEntry.Title)) + "\n\n")
 
 			// Tags for the entry
-			tagsLine := "Tags: "
+			var tagsLine string
 			if len(m.tags) > 0 {
 				tags := []string{}
 				for _, tag := range m.tags {
@@ -501,10 +504,10 @@ func (m model) View() string {
 			} else {
 				tagsLine += "-"
 			}
-			rightBuilder.WriteString(tagsLine + "\n\n")
+			rightBuilder.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue)).Render("Tags: ") + lipgloss.NewStyle().Foreground(lipgloss.Color(colorPurple)).Render(tagsLine) + "\n\n")
 
 			// Entry content
-			rightBuilder.WriteString(m.currentEntry.Content)
+			rightBuilder.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite)).Render(m.currentEntry.Content))
 		} else {
 			rightBuilder.WriteString("Select an entry to view details.")
 		}
