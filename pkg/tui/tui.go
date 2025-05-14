@@ -320,7 +320,20 @@ func (m model) View() string {
 				pointer = "> "
 				itemStyle = selectedStyle
 			}
-			journalsBuilder.WriteString(pointer + itemStyle.Render(journal.Name) + "\n")
+			// Calculate available width for journal name (panel width - pointer - padding - border)
+			availableWidth := leftWidth - len(pointer) - 4 - 1
+			journalName := journal.Name
+			if len(journalName) > availableWidth {
+				if availableWidth > 3 {
+					journalName = fmt.Sprintf("%s..", journalName[:availableWidth-2]) // Minus 2 dots
+				}
+			}
+
+			journalName = lipgloss.NewStyle().
+				MaxWidth(availableWidth).
+				Render(journalName)
+
+			journalsBuilder.WriteString(pointer + itemStyle.Render(journalName) + "\n")
 		}
 	}
 
@@ -374,8 +387,21 @@ func (m model) View() string {
 					// TODO: Handle if we focus 3rd column entry editor, not reduce selected entry highlight
 					itemStyle = selectedStyle
 				}
-				title := entry.Title
-				middleBuilder.WriteString(pointer + itemStyle.Render(title) + "\n")
+
+				// Calculate available width for entry title (panel width - pointer - padding - border)
+				availableWidth := middleWidth - len(pointer) - 4 - 1
+				entryTitle := entry.Title
+				if len(entryTitle) > availableWidth {
+					if availableWidth > 3 {
+						entryTitle = fmt.Sprintf("%s..", entryTitle[:availableWidth-2]) // Minus 2 dots
+					}
+				}
+
+				entryTitle = lipgloss.NewStyle().
+					MaxWidth(availableWidth).
+					Render(entryTitle)
+
+				middleBuilder.WriteString(pointer + itemStyle.Render(entryTitle) + "\n")
 			}
 		}
 	} else {
