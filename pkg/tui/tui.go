@@ -20,11 +20,11 @@ import (
 // Color palette "Blue Moon" from https://gogh-co.github.io/Gogh/
 const (
 	colorBorder = "#353b52"
-	colorError  = "#e61f44"
 
 	colorWhite    = "#ffffff"
 	colorGreen    = "#acfab4"
 	colorGreenDim = "#b4c4b4"
+	colorRed      = "#e61f44"
 	colorRedDim   = "#d06178"
 	colorPurple   = "#b9a3eb"
 	colorBlue     = "#89ddff"
@@ -42,6 +42,9 @@ var (
 	selectedStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#353b52")).
 			Background(lipgloss.Color(colorGreen))
+	dangerSelectedStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#353b52")).
+				Background(lipgloss.Color(colorRed))
 	inactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite))
 	// Specific border styles will be defined for panels in the View function
 	footerStyle = lipgloss.NewStyle().
@@ -66,12 +69,14 @@ type model struct {
 
 	quitting bool
 
-	journalCursor        int // Index of selected journal
-	journalCreating      bool
-	journalCreatingStep  int // 0 = editing journal name, 1 = editing journal description
-	journalCreatingError string
-	journalNameInput     textinput.Model
-	journalDescInput     textinput.Model
+	journalCursor           int // Index of selected journal
+	journalCreating         bool
+	journalCreatingStep     int // 0 = editing journal name, 1 = editing journal description
+	journalCreatingError    string
+	journalNameInput        textinput.Model
+	journalDescInput        textinput.Model
+	journalDeleting         bool
+	journalDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
 	entryCursor int // Index of selected entry
 	// entryCreating
@@ -179,6 +184,55 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle key presses for navigation and input
 	case tea.KeyMsg:
+		if m.journalDeleting {
+			// Deleting Journal Mode
+			switch msg.String() {
+			case "up", "k":
+				m.journalDeleteConfirmIdx = 0
+			case "down", "j":
+				m.journalDeleteConfirmIdx = 1
+			case "enter":
+				if m.journalDeleteConfirmIdx == 0 {
+					// Confirm deletion of selected journal
+					journalID := m.journals[m.journalCursor].ID
+					err := memories.DeleteJournal(context.Background(), m.db, journalID)
+					if err != nil {
+						m.err = err
+						m.journalDeleting = false
+						return m, nil
+					}
+					// Remove journal from list and adjust selection
+					oldIndex := m.journalCursor
+					m.journals = append(m.journals[:oldIndex], m.journals[oldIndex+1:]...)
+
+					m.journalDeleting = false
+
+					// Adjust cursor if we're at the end of the list now
+					if len(m.journals) > 0 {
+						if m.journalCursor >= len(m.journals) {
+							m.journalCursor = len(m.journals) - 1
+						}
+						return m, loadEntries(m.db, m.journals[m.journalCursor].ID, false)
+					} else {
+						// No journals remaining; clear entries
+						m.entries = []memories.Entry{}
+						m.currentEntry = memories.Entry{}
+						m.tags = []memories.Tag{}
+					}
+				} else {
+					// Cancel deletion
+					m.journalDeleting = false
+				}
+
+				return m, nil
+			case "esc":
+				// Cancel deletion on Escape
+				m.journalDeleting = false
+				return m, nil
+			}
+			return m, nil
+
+		}
 		if m.journalCreating {
 			// Creating New Journal Mode
 			switch msg.Type {
@@ -290,10 +344,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "n":
-			m.journalCreating = true
 			m.journalCreatingStep = 0
 			m.journalNameInput.Reset()
 			m.journalDescInput.Reset()
+			m.journalCreating = true
+			m.journalNameInput.Focus() // Make sure to focus the name input
+			m.journalDescInput.Blur()  // Ensure description input is not focused
+		case "d":
+			if m.columnFocus == 0 && len(m.journals) > 0 {
+				m.journalDeleting = true
+				m.journalDeleteConfirmIdx = 0
+			}
+			return m, nil
 
 		case "enter":
 			// "Enter" on selection (future functionality):
@@ -473,6 +535,9 @@ func (m model) View() string {
 	if m.journalCreating {
 		rightBuilderSubtitleText = "Create New Journal"
 	}
+	if m.journalDeleting {
+		rightBuilderSubtitleText = "Delete Journal"
+	}
 	rightBuilder.WriteString(subtitleStyle.Width(rightWidth - bordersAndPaddingWidth).Render(rightBuilderSubtitleText))
 	rightBuilder.WriteString("\n\n")
 
@@ -484,9 +549,23 @@ func (m model) View() string {
 
 		if m.journalCreatingError != "" {
 			rightBuilder.WriteString("\n" +
-				lipgloss.NewStyle().Foreground(lipgloss.Color(colorError)).
+				lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed)).
 					Render(m.journalCreatingError) + "\n")
 		}
+	} else if m.journalDeleting {
+		// Show delete confirmation prompt
+		rightBuilder.WriteString("Name: " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed)).
+			Render(m.journals[m.journalCursor].Name) + "\n\n")
+		yesOpt, noOpt := "Yes", "No"
+		if m.journalDeleteConfirmIdx == 0 {
+			yesOpt = dangerSelectedStyle.Render(" >" + yesOpt)
+			noOpt = inactiveStyle.Render("  " + noOpt)
+		} else {
+			yesOpt = inactiveStyle.Render("  " + yesOpt)
+			noOpt = selectedStyle.Render(" >" + noOpt)
+		}
+		rightBuilder.WriteString(fmt.Sprintf("%s\n%s\n\n", yesOpt, noOpt))
+		rightBuilder.WriteString("(enter to confirm, esc to cancel, up/down to switch)")
 	} else if len(m.journals) > 0 && m.journalCursor <= len(m.journals) {
 		if m.currentEntry.ID != uuid.Nil {
 			rightBuilder.WriteString(
@@ -543,7 +622,7 @@ func (m model) View() string {
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, middlePanel, rightPanel)
 
 	// Footer with usage instructions
-	footerText := "\n↑/↓ to navigate • Enter to select • n to create • q to quit"
+	footerText := "\n↑/↓ to navigate • Enter to select • n to create • d to delete • q to quit"
 	// Render the footer bar (full width)
 	footerBar := footerStyle.Width(m.width).Render(footerText)
 
