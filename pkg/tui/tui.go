@@ -34,6 +34,8 @@ var (
 			Foreground(lipgloss.Color("#89ddff")).
 			Background(lipgloss.Color("#353b52")).
 			Padding(0, 2).Align(lipgloss.Center)
+	subtitleStyle = lipgloss.NewStyle().Bold(true).
+			Foreground(lipgloss.Color("#ffffff"))
 	selectedStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#353b52")).
 			Background(lipgloss.Color(colorGreen))
@@ -321,9 +323,6 @@ func (m model) View() string {
 
 	// Determine title bar text based on mode
 	titleText := "Recall - datastore for memories"
-	if m.journalCreating {
-		titleText = "Create New Journal"
-	}
 	// Render the title bar (full width)
 	titleBar := titleStyle.Width(m.width).Render(titleText)
 
@@ -336,10 +335,15 @@ func (m model) View() string {
 	// Left column: Journals list and Info
 	var journalsBuilder, infoBuilder strings.Builder
 
+	bordersAndPaddingWidth := 4
+
 	// Calculate heights for the split panels (subtract 4 for borders and padding)
-	quarterHeight := (m.height - 4) / 4
+	quarterHeight := (m.height - bordersAndPaddingWidth) / 4
 
 	// Build journals section
+	journalsBuilder.WriteString(subtitleStyle.Width(leftWidth - bordersAndPaddingWidth).Render("  Journals"))
+	journalsBuilder.WriteString("\n\n")
+
 	if len(m.journals) == 0 {
 		journalsBuilder.WriteString("No journals yet. Press 'n' to create new.\n")
 	} else {
@@ -401,7 +405,7 @@ func (m model) View() string {
 	journalsPanelStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, true, false).
 		BorderForeground(lipgloss.Color(colorBorder)).
-		Padding(1, 2)
+		Padding(0, 2)
 	journalsPanel := journalsPanelStyle.Width(leftWidth).Height(quarterHeight * 3).
 		Render(journalsBuilder.String())
 
@@ -418,10 +422,13 @@ func (m model) View() string {
 
 	// Middle column: Entries list
 	var middleBuilder strings.Builder
+	middleBuilder.WriteString(subtitleStyle.Width(middleWidth - bordersAndPaddingWidth).Render("  Entries"))
+	middleBuilder.WriteString("\n\n")
+
 	if m.journalCursor <= len(m.journals) {
 		// If a journal is selected
 		if len(m.entries) == 0 {
-			middleBuilder.WriteString("No entries yet.\n")
+			middleBuilder.WriteString("  No entries yet.\n")
 		} else {
 			for i, entry := range m.entries {
 				pointer := "  "
@@ -453,11 +460,19 @@ func (m model) View() string {
 		}
 	} else {
 		// No journal selected (e.g., currently on "+ New Journal")
-		middleBuilder.WriteString("No journal selected.\n")
+		middleBuilder.WriteString("  No journal selected.\n")
 	}
 
 	// Right column: Entry preview or New Journal form
 	var rightBuilder strings.Builder
+
+	rightBuilderSubtitleText := "Entry"
+	if m.journalCreating {
+		rightBuilderSubtitleText = "Create New Journal"
+	}
+	rightBuilder.WriteString(subtitleStyle.Width(rightWidth - bordersAndPaddingWidth).Render(rightBuilderSubtitleText))
+	rightBuilder.WriteString("\n\n")
+
 	if m.journalCreating {
 		// Show the form for creating a new journal
 		rightBuilder.WriteString("Name: " + m.journalNameInput.View() + "\n")
@@ -498,25 +513,27 @@ func (m model) View() string {
 		rightBuilder.WriteString("Select a journal to view details.")
 	}
 
+	panelHeightPadding := 3
+
 	// Left panel: border on the right side and horizontal split to journal list and info section
 	leftPanelStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(lipgloss.Color(colorBorder)).
-		Padding(1, 2)
-	leftPanelStyle.Width(leftWidth).Height(m.height - 3).
+		Padding(0, 2)
+	leftPanelStyle.Width(leftWidth).Height(m.height - panelHeightPadding).
 		Render(leftPanel)
 
 	// Middle panel: border on the right side only
 	middlePanelStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(lipgloss.Color(colorBorder)).
-		Padding(1, 2)
-	middlePanel := middlePanelStyle.Width(middleWidth).Height(m.height - 3).
+		Padding(0, 2)
+	middlePanel := middlePanelStyle.Width(middleWidth).Height(m.height - panelHeightPadding).
 		Render(middleBuilder.String())
 
 	// Right panel: no border (open content area)
-	rightPanelStyle := lipgloss.NewStyle().Padding(1, 2)
-	rightPanel := rightPanelStyle.Width(rightWidth).Height(m.height - 3).
+	rightPanelStyle := lipgloss.NewStyle().Padding(0, 2)
+	rightPanel := rightPanelStyle.Width(rightWidth).Height(m.height - panelHeightPadding).
 		Render(rightBuilder.String())
 
 	// Join the three panels horizontally (top aligned)
