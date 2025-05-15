@@ -27,7 +27,7 @@ const (
 	listEntriesStatement = `
 	SELECT id, journal_id, title, content, content_type, deleted, created_at, updated_at 
 	FROM entries
-	WHERE journal_id = ? AND (deleted = ? OR ? = true)
+	WHERE journal_id = ? AND deleted = ?
 	ORDER BY updated_at DESC
 	`
 
@@ -121,8 +121,7 @@ func ListEntries(ctx context.Context, db *sql.DB, journalID uuid.UUID, includeDe
 		}
 		return nil, err
 	}
-
-	rows, err := db.QueryContext(ctx, listEntriesStatement, journalID, false, includeDeleted)
+	rows, err := db.QueryContext(ctx, listEntriesStatement, journalID, includeDeleted)
 	if err != nil {
 		return nil, err
 	}
