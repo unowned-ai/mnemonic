@@ -54,6 +54,8 @@ type model struct {
 	entryDeleting         bool
 	entryDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
+	dynamicWidth bool // Toggle for dynamic column widths
+
 	// Animation state
 	marqueeOffset int
 	marqueeTimer  int
@@ -526,6 +528,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.entryDeleting = true
 			}
 			return m, nil
+
+		case "z":
+			if m.journalCreating || m.entryCreating {
+				return m, nil
+			}
+			// Toggle dynamic width mode
+			m.dynamicWidth = !m.dynamicWidth
+			return m, nil
 		}
 
 	case time.Time:
@@ -559,19 +569,29 @@ func (m model) View() string {
 
 	// Calculate column widths based on focus
 	var leftWidth, middleWidth, rightWidth int
-	switch m.columnFocus {
-	case 0: // Journals column focused
-		leftWidth = (m.width * 30) / 100   // 30%
-		middleWidth = (m.width * 40) / 100 // 40%
-		rightWidth = (m.width * 30) / 100  // 30%
-	case 1: // Entries column focused
-		leftWidth = (m.width * 20) / 100   // 20%
-		middleWidth = (m.width * 40) / 100 // 40%
-		rightWidth = (m.width * 40) / 100  // 40%
-	case 2: // Entry details focused
-		leftWidth = (m.width * 20) / 100   // 20%
-		middleWidth = (m.width * 20) / 100 // 20%
-		rightWidth = (m.width * 60) / 100  // 60%
+
+	if m.dynamicWidth {
+		// Dynamic widths based on focus
+		switch m.columnFocus {
+		case 0: // Journals column focused
+			leftWidth = (m.width * 30) / 100   // 30%
+			middleWidth = (m.width * 40) / 100 // 40%
+			rightWidth = (m.width * 30) / 100  // 30%
+		case 1: // Entries column focused
+			leftWidth = (m.width * 20) / 100   // 20%
+			middleWidth = (m.width * 40) / 100 // 40%
+			rightWidth = (m.width * 40) / 100  // 40%
+		case 2: // Entry details focused
+			leftWidth = (m.width * 20) / 100   // 20%
+			middleWidth = (m.width * 20) / 100 // 20%
+			rightWidth = (m.width * 60) / 100  // 60%
+		}
+	} else {
+		// Fixed widths (25%, 25%, 50%)
+		halfWidth := m.width / 2
+		leftWidth = halfWidth / 2                        // 25%
+		middleWidth = halfWidth - leftWidth              // 25%
+		rightWidth = m.width - (leftWidth + middleWidth) // 50%
 	}
 
 	// Account for rounding errors to ensure total width matches screen width
@@ -787,7 +807,7 @@ func (m model) View() string {
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, middlePanel, rightPanel)
 
 	// Footer with usage instructions
-	footerText := "\n↑/↓ to navigate • Enter to select • n to create • d to delete • q to quit"
+	footerText := "\n↑/↓ to navigate • Enter to select • n to create • d to delete • z to toggle layout • q to quit"
 	// Render the footer bar (full width)
 	footerBar := footerStyle.Width(m.width).Render(footerText)
 
