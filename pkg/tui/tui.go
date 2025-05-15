@@ -461,13 +461,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "right", "l":
-			if m.columnFocus < 1 {
+			// Don't move right if we're already at the rightmost column
+			if m.columnFocus >= 2 {
+				return m, nil
+			}
+
+			// Moving from journals to entries
+			if m.columnFocus == 0 {
+				// Only allow moving to entries if we have a journal selected
+				if len(m.journals) == 0 {
+					return m, nil
+				}
 				m.entryCursor = 0
 				m.columnFocus++
+				// If there are entries, load the first entry's details
 				if len(m.entries) > 0 {
 					return m, getEntryDetails(m.db, m.entries[0].ID)
 				}
+				return m, nil
 			}
+
+			// Moving from entries to details
+			if m.columnFocus == 1 {
+				// Only allow moving to details if we have an entry selected
+				if len(m.entries) == 0 {
+					return m, nil
+				}
+				m.columnFocus++
+				return m, nil
+			}
+
 			return m, nil
 
 		case "left", "h":
@@ -534,11 +557,26 @@ func (m model) View() string {
 	titleText := "Recall - datastore for memories"
 	titleBar := titleStyle.Width(m.width).Render(titleText)
 
-	// Calculate column widths (left ~25%, middle ~25%, right ~50%)
-	halfWidth := m.width / 2
-	leftWidth := halfWidth / 2
-	middleWidth := halfWidth - leftWidth
-	rightWidth := m.width - (leftWidth + middleWidth)
+	// Calculate column widths based on focus
+	var leftWidth, middleWidth, rightWidth int
+	switch m.columnFocus {
+	case 0: // Journals column focused
+		leftWidth = (m.width * 30) / 100   // 30%
+		middleWidth = (m.width * 40) / 100 // 40%
+		rightWidth = (m.width * 30) / 100  // 30%
+	case 1: // Entries column focused
+		leftWidth = (m.width * 20) / 100   // 20%
+		middleWidth = (m.width * 40) / 100 // 40%
+		rightWidth = (m.width * 40) / 100  // 40%
+	case 2: // Entry details focused
+		leftWidth = (m.width * 20) / 100   // 20%
+		middleWidth = (m.width * 20) / 100 // 20%
+		rightWidth = (m.width * 60) / 100  // 60%
+	}
+
+	// Account for rounding errors to ensure total width matches screen width
+	remainder := m.width - (leftWidth + middleWidth + rightWidth)
+	rightWidth += remainder
 
 	// Update input widths to match right pane
 	m.journalNameInput.Width = rightWidth - m.bordersAndPaddingWidth
@@ -565,7 +603,7 @@ func (m model) View() string {
 			// Calculate available width for journal name (panel width - pointer - padding - border)
 			availableWidth := leftWidth - m.pointerLen - 4 - 1
 
-			if i == m.journalCursor {
+			if i == m.journalCursor && m.columnFocus >= 0 {
 				// Selected journal is highlighted
 				m.ViewListElemMarquee(journal.Name, &journalsBuilder, availableWidth)
 			} else {
@@ -618,7 +656,7 @@ func (m model) View() string {
 			// Calculate available width for entry title (panel width - pointer - padding - border)
 			availableWidth := middleWidth - m.pointerLen - 4 - 1
 
-			if i == m.entryCursor && m.columnFocus == 1 {
+			if i == m.entryCursor && m.columnFocus >= 1 {
 				// Selected entry is highlighted
 				m.ViewListElemMarquee(entry.Title, &middleBuilder, availableWidth)
 			} else {
