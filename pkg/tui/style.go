@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -34,7 +35,14 @@ var (
 	dangerSelectedStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(colorGray)).
 				Background(lipgloss.Color(colorRed))
-	inactiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite))
+	textStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite))
+	textRedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed))
+
+	elemTitleHeaderStyle = lipgloss.NewStyle().Foreground(lipgloss.
+				Color(colorBlue))
+	multiElemsTitleStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(colorPurple))
+
 	// Specific border styles will be defined for panels in the View function
 	footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(colorGray))
@@ -51,4 +59,22 @@ func TextStatusColorize(text string, status int) string {
 	default:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color(colorGray)).Render(text)
 	}
+}
+
+// Generates pointer symbol when line in focus
+func generateLinePointer(isPoint bool, length int) string {
+	if isPoint {
+		return ">" + strings.Repeat(" ", length-1)
+	}
+	return strings.Repeat(" ", length)
+}
+
+// Create a padded version marquee text for scrolling
+func marqueeText(text string, marqueeOffset, padding, availableWidth int) string {
+	paddedText := text + "    " + text
+	offset := marqueeOffset % (len(text) + padding)
+	if offset+availableWidth <= len(paddedText) {
+		text = paddedText[offset : offset+availableWidth]
+	}
+	return text
 }

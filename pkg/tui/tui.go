@@ -51,6 +51,11 @@ type model struct {
 	// Animation state
 	marqueeOffset int
 	marqueeTimer  int
+
+	// Paddings, offsets, element dimensions
+	pointerLen             int
+	bordersAndPaddingWidth int
+	panelHeightPadding     int
 }
 
 // Initialize TUI model
@@ -91,6 +96,10 @@ func initModel(db *sql.DB) model {
 
 		marqueeOffset: 0,
 		marqueeTimer:  0,
+
+		pointerLen:             2,
+		bordersAndPaddingWidth: 4,
+		panelHeightPadding:     3,
 	}
 }
 
@@ -392,13 +401,13 @@ func (m model) View() string {
 	if m.quitting {
 		return "Unplugging mnemonic unit... Session saved.\n"
 	}
+
 	if m.err != nil {
 		return fmt.Sprintf("Error: %v\n", m.err)
 	}
 
-	// Determine title bar text based on mode
+	// Title Bar
 	titleText := "Recall - datastore for memories"
-	// Render the title bar (full width)
 	titleBar := titleStyle.Width(m.width).Render(titleText)
 
 	// Calculate column widths (left ~25%, middle ~25%, right ~50%)
@@ -407,20 +416,18 @@ func (m model) View() string {
 	middleWidth := halfWidth - leftWidth
 	rightWidth := m.width - (leftWidth + middleWidth)
 
-	bordersAndPaddingWidth := 4
-
 	// Update input widths to match right pane
-	m.journalNameInput.Width = rightWidth - bordersAndPaddingWidth
-	m.journalDescInput.Width = rightWidth - bordersAndPaddingWidth
+	m.journalNameInput.Width = rightWidth - m.bordersAndPaddingWidth
+	m.journalDescInput.Width = rightWidth - m.bordersAndPaddingWidth
 
-	// Left column: Journals list and Info
+	// Left Column: Journals list and Info panel
 	var journalsBuilder, infoBuilder strings.Builder
 
 	// Calculate heights for the split panels (subtract 4 for borders and padding)
-	quarterHeight := (m.height - bordersAndPaddingWidth) / 4
+	quarterHeight := (m.height - m.bordersAndPaddingWidth) / 4
 
 	// Build journals section
-	journalsBuilder.WriteString(subtitleStyle.Width(leftWidth - bordersAndPaddingWidth).Render("  Journals"))
+	journalsBuilder.WriteString(subtitleStyle.Width(leftWidth - m.bordersAndPaddingWidth).Render("  Journals"))
 	journalsBuilder.WriteString("\n\n")
 
 	if len(m.journals) == 0 {
@@ -428,41 +435,14 @@ func (m model) View() string {
 	} else {
 		// List each journal in the left column
 		for i, journal := range m.journals {
-			pointer := "  "
-			itemStyle := inactiveStyle
 			// Calculate available width for journal name (panel width - pointer - padding - border)
-			availableWidth := leftWidth - len(pointer) - 4 - 1
+			availableWidth := leftWidth - m.pointerLen - 4 - 1
 
-			if m.journalCursor == i {
-				pointer = "> "
-				itemStyle = selectedStyle
-
-				// Handle marquee animation for selected journal
-				journalName := journal.Name
-				if len(journalName) > availableWidth {
-					// Create a padded version for scrolling
-					paddedName := journalName + "    " + journalName
-					offset := m.marqueeOffset % (len(journalName) + 4) // 4 is padding space
-					if offset+availableWidth <= len(paddedName) {
-						journalName = paddedName[offset : offset+availableWidth]
-					}
-				}
-				journalName = lipgloss.NewStyle().
-					MaxWidth(availableWidth).
-					Render(journalName)
-				journalsBuilder.WriteString(pointer + itemStyle.Render(journalName) + "\n")
+			if i == m.journalCursor {
+				// Selected journal is highlighted
+				m.ViewListElemMarquee(journal.Name, &journalsBuilder, availableWidth)
 			} else {
-				// Normal truncation for non-selected journals
-				journalName := journal.Name
-				if len(journalName) > availableWidth {
-					if availableWidth > 3 {
-						journalName = fmt.Sprintf("%s..", journalName[:availableWidth-2])
-					}
-				}
-				journalName = lipgloss.NewStyle().
-					MaxWidth(availableWidth).
-					Render(journalName)
-				journalsBuilder.WriteString(pointer + itemStyle.Render(journalName) + "\n")
+				m.ViewListElemNormal(journal.Name, &journalsBuilder, availableWidth)
 			}
 		}
 	}
@@ -499,50 +479,28 @@ func (m model) View() string {
 	// Combine the panels vertically
 	leftPanel := lipgloss.JoinVertical(lipgloss.Left, journalsPanel, infoPanel)
 
-	// Middle column: Entries list
+	// Middle Column - Entries list
 	var middleBuilder strings.Builder
-	middleBuilder.WriteString(subtitleStyle.Width(middleWidth - bordersAndPaddingWidth).Render("  Entries"))
+	middleBuilder.WriteString(subtitleStyle.Width(middleWidth - m.bordersAndPaddingWidth).Render("  Entries"))
 	middleBuilder.WriteString("\n\n")
 
-	if m.journalCursor <= len(m.journals) {
-		// If a journal is selected
-		if len(m.entries) == 0 {
-			middleBuilder.WriteString("  No entries yet.\n")
-		} else {
-			for i, entry := range m.entries {
-				pointer := "  "
-				itemStyle := inactiveStyle
-				if i == m.entryCursor && m.columnFocus != 0 {
-					// Selected entry is highlighted; pointer if entries column is focused
-					if m.columnFocus == 1 {
-						pointer = "> "
-					}
-					// TODO: Handle if we focus 3rd column entry editor, not reduce selected entry highlight
-					itemStyle = selectedStyle
-				}
+	if len(m.entries) == 0 {
+		middleBuilder.WriteString("  No entries yet.\n")
+	} else {
+		for i, entry := range m.entries {
+			// Calculate available width for entry title (panel width - pointer - padding - border)
+			availableWidth := middleWidth - m.pointerLen - 4 - 1
 
-				// Calculate available width for entry title (panel width - pointer - padding - border)
-				availableWidth := middleWidth - len(pointer) - 4 - 1
-				entryTitle := entry.Title
-				if len(entryTitle) > availableWidth {
-					if availableWidth > 3 {
-						entryTitle = fmt.Sprintf("%s..", entryTitle[:availableWidth-2]) // Minus 2 dots
-					}
-				}
-
-				entryTitle = lipgloss.NewStyle().
-					MaxWidth(availableWidth).
-					Render(entryTitle)
-
-				middleBuilder.WriteString(pointer + itemStyle.Render(entryTitle) + "\n")
+			if i == m.entryCursor && m.columnFocus == 1 {
+				// Selected entry is highlighted
+				m.ViewListElemMarquee(entry.Title, &middleBuilder, availableWidth)
+			} else {
+				m.ViewListElemNormal(entry.Title, &middleBuilder, availableWidth)
 			}
 		}
-	} else {
-		// No journal selected (e.g., currently on "+ New Journal")
-		middleBuilder.WriteString("  No journal selected.\n")
 	}
 
-	// Right column: Entry preview or New Journal form
+	// Right Column: Entry preview or New elements form
 	var rightBuilder strings.Builder
 
 	rightBuilderSubtitleText := "Entry"
@@ -555,53 +513,51 @@ func (m model) View() string {
 	if m.entryDeleting {
 		rightBuilderSubtitleText = "Delete Entry"
 	}
-	rightBuilder.WriteString(subtitleStyle.Width(rightWidth - bordersAndPaddingWidth).Render(rightBuilderSubtitleText))
+	rightBuilder.WriteString(subtitleStyle.Width(rightWidth - m.bordersAndPaddingWidth).Render(rightBuilderSubtitleText))
 	rightBuilder.WriteString("\n\n")
 
 	if m.journalCreating {
 		// Show the form for creating a new journal
-		rightBuilder.WriteString("Name: " + m.journalNameInput.View() + "\n")
-		rightBuilder.WriteString("Description: " + m.journalDescInput.View() + "\n\n")
+		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Name: ") + m.journalNameInput.View() + "\n")
+		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Description: ") + m.journalDescInput.View() + "\n\n")
 		rightBuilder.WriteString("(enter to submit, esc to cancel)")
 
 		if m.journalCreatingError != "" {
 			rightBuilder.WriteString("\n\n" +
-				lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed)).
+				textRedStyle.
 					Render(m.journalCreatingError) + "\n")
 		}
 	} else if m.journalDeleting {
-		// Show delete confirmation prompt
-		rightBuilder.WriteString("Name: " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed)).
+		// Show delete confirmation prompt for journal
+		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Name: ") + textStyle.
 			Render(m.journals[m.journalCursor].Name) + "\n\n")
 		yesOpt, noOpt := "Yes", "No"
 		if m.journalDeleteConfirmIdx == 0 {
-			yesOpt = dangerSelectedStyle.Render(" >" + yesOpt)
-			noOpt = inactiveStyle.Render("  " + noOpt)
+			yesOpt = dangerSelectedStyle.Render(generateLinePointer(true, m.pointerLen) + yesOpt)
+			noOpt = textStyle.Render(generateLinePointer(false, m.pointerLen) + noOpt)
 		} else {
-			yesOpt = inactiveStyle.Render("  " + yesOpt)
-			noOpt = selectedStyle.Render(" >" + noOpt)
+			yesOpt = textStyle.Render(generateLinePointer(false, m.pointerLen) + yesOpt)
+			noOpt = selectedStyle.Render(generateLinePointer(true, m.pointerLen) + noOpt)
 		}
 		rightBuilder.WriteString(fmt.Sprintf("%s\n%s\n\n", yesOpt, noOpt))
 		rightBuilder.WriteString("(enter to confirm, esc to cancel, up/down to switch)")
 	} else if m.entryDeleting {
-		// Show delete confirmation prompt
-		rightBuilder.WriteString("Title: " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed)).
+		// Show delete confirmation prompt for entry
+		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Title: ") + textStyle.
 			Render(m.entries[m.entryCursor].Title) + "\n\n")
 		yesOpt, noOpt := "Yes", "No"
 		if m.entryDeleteConfirmIdx == 0 {
-			yesOpt = dangerSelectedStyle.Render(" >" + yesOpt)
-			noOpt = inactiveStyle.Render("  " + noOpt)
+			yesOpt = dangerSelectedStyle.Render(generateLinePointer(true, m.pointerLen) + yesOpt)
+			noOpt = textStyle.Render(generateLinePointer(false, m.pointerLen) + noOpt)
 		} else {
-			yesOpt = inactiveStyle.Render("  " + yesOpt)
-			noOpt = selectedStyle.Render(" >" + noOpt)
+			yesOpt = textStyle.Render(generateLinePointer(false, m.pointerLen) + yesOpt)
+			noOpt = selectedStyle.Render(generateLinePointer(true, m.pointerLen) + noOpt)
 		}
 		rightBuilder.WriteString(fmt.Sprintf("%s\n%s\n\n", yesOpt, noOpt))
 		rightBuilder.WriteString("(enter to confirm, esc to cancel, up/down to switch)")
 	} else if len(m.journals) > 0 && m.journalCursor <= len(m.journals) {
 		if m.currentEntry.entry.ID != uuid.Nil {
-			rightBuilder.WriteString(
-				lipgloss.NewStyle().Bold(true).
-					Render(lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue)).Render("Title: ")+lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite)).Render(m.currentEntry.entry.Title)) + "\n\n")
+			rightBuilder.WriteString(elemTitleHeaderStyle.Render("Title: ") + textStyle.Render(m.currentEntry.entry.Title) + "\n\n")
 
 			// Tags for the entry
 			var tagsLine string
@@ -614,10 +570,10 @@ func (m model) View() string {
 			} else {
 				tagsLine += "-"
 			}
-			rightBuilder.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue)).Render("Tags: ") + lipgloss.NewStyle().Foreground(lipgloss.Color(colorPurple)).Render(tagsLine) + "\n\n")
+			rightBuilder.WriteString(elemTitleHeaderStyle.Render("Tags: ") + multiElemsTitleStyle.Render(tagsLine) + "\n\n")
 
 			// Entry content
-			rightBuilder.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite)).Render(m.currentEntry.entry.Content))
+			rightBuilder.WriteString(textStyle.Render(m.currentEntry.entry.Content))
 		} else {
 			rightBuilder.WriteString("Select an entry to view details.")
 		}
@@ -626,14 +582,12 @@ func (m model) View() string {
 		rightBuilder.WriteString("Select a journal to view details.")
 	}
 
-	panelHeightPadding := 3
-
 	// Left panel: border on the right side and horizontal split to journal list and info section
 	leftPanelStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(lipgloss.Color(colorGray)).
 		Padding(0, 2)
-	leftPanelStyle.Width(leftWidth).Height(m.height - panelHeightPadding).
+	leftPanelStyle.Width(leftWidth).Height(m.height - m.panelHeightPadding).
 		Render(leftPanel)
 
 	// Middle panel: border on the right side only
@@ -641,12 +595,12 @@ func (m model) View() string {
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(lipgloss.Color(colorGray)).
 		Padding(0, 2)
-	middlePanel := middlePanelStyle.Width(middleWidth).Height(m.height - panelHeightPadding).
+	middlePanel := middlePanelStyle.Width(middleWidth).Height(m.height - m.panelHeightPadding).
 		Render(middleBuilder.String())
 
 	// Right panel: no border (open content area)
 	rightPanelStyle := lipgloss.NewStyle().Padding(0, 2)
-	rightPanel := rightPanelStyle.Width(rightWidth).Height(m.height - panelHeightPadding).
+	rightPanel := rightPanelStyle.Width(rightWidth).Height(m.height - m.panelHeightPadding).
 		Render(rightBuilder.String())
 
 	// Join the three panels horizontally (top aligned)
@@ -659,6 +613,30 @@ func (m model) View() string {
 
 	// Assemble final UI string
 	return titleBar + "\n\n" + columns + footerBar
+}
+
+// View of normal truncation for non-selected list element
+func (m model) ViewListElemNormal(elemName string, builder *strings.Builder, availableWidth int) {
+	if len(elemName) > availableWidth {
+		if availableWidth > 3 {
+			elemName = fmt.Sprintf("%s..", elemName[:availableWidth-2]) // Minus 2 dots
+		}
+	}
+	elemName = lipgloss.NewStyle().
+		MaxWidth(availableWidth).
+		Render(elemName)
+	builder.WriteString(generateLinePointer(false, m.pointerLen) + textStyle.Render(elemName) + "\n")
+}
+
+// View of marquee truncation for selected list element
+func (m model) ViewListElemMarquee(elemName string, builder *strings.Builder, availableWidth int) {
+	if len(elemName) > availableWidth {
+		elemName = marqueeText(elemName, m.marqueeOffset, m.bordersAndPaddingWidth, availableWidth)
+	}
+	elemName = lipgloss.NewStyle().
+		MaxWidth(availableWidth).
+		Render(elemName)
+	builder.WriteString(generateLinePointer(true, m.pointerLen) + selectedStyle.Render(elemName) + "\n")
 }
 
 // Create and start the Bubble Tea TUI
