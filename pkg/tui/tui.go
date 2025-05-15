@@ -46,10 +46,11 @@ type model struct {
 
 	entryCursor           int // Index of selected entry
 	entryCreating         bool
-	entryCreatingStep     int // 0 = editing entry title, 1 = editing entry content
+	entryCreatingStep     int // 0 = editing entry title, 1 = editing entry tags, 2 = editing entry content
 	entryCreatingError    string
 	entryTitleInput       textinput.Model
 	entryContentInput     textinput.Model
+	entryTagsInput        textinput.Model
 	entryDeleting         bool
 	entryDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
@@ -88,6 +89,10 @@ func initModel(db *sql.DB) model {
 	etcont.Placeholder = "Entry content"
 	etcont.CharLimit = 10240
 
+	ettags := textinput.New()
+	ettags.Placeholder = "Tags (comma or space separated)"
+	ettags.CharLimit = 1024
+
 	return model{
 		journals: []memories.Journal{},
 		entries:  []memories.Entry{},
@@ -110,6 +115,7 @@ func initModel(db *sql.DB) model {
 		entryCursor:       0,
 		entryTitleInput:   ettitle,
 		entryContentInput: etcont,
+		entryTagsInput:    ettags,
 
 		marqueeOffset: 0,
 		marqueeTimer:  0,
@@ -289,10 +295,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 
-					// Press Enter on name field -> move to content field
+					// Press Enter on title field -> move to tags field
 					m.entryCreatingError = ""
 					m.entryCreatingStep = 1
 					m.entryTitleInput.Blur()
+					m.entryTagsInput.Focus()
+				} else if m.entryCreatingStep == 1 {
+					// Press Enter on tags field -> move to content field
+					m.entryCreatingError = ""
+					m.entryCreatingStep = 2
+					m.entryTagsInput.Blur()
 					m.entryContentInput.Focus()
 				} else {
 					// Press Enter on content field -> submit the form (create entry)
@@ -303,11 +315,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 
+					// Process tags if any were entered
+					if m.entryTagsInput.Value() != "" {
+						// Split tags by comma or space
+						tags := strings.FieldsFunc(m.entryTagsInput.Value(), func(r rune) bool {
+							return r == ',' || r == ' '
+						})
+
+						// Create each tag
+						for _, tag := range tags {
+							tag = strings.TrimSpace(tag)
+							if tag != "" {
+								err := memories.TagEntry(context.Background(), m.db, entry.ID, tag)
+								if err != nil {
+									m.err = fmt.Errorf("error creating tag '%s': %v", tag, err)
+									return m, nil
+								}
+							}
+						}
+					}
+
 					// Exit create mode and reset form inputs
 					m.entryCreating = false
 					m.entryCreatingStep = 0
 					m.entryTitleInput.Reset()
 					m.entryContentInput.Reset()
+					m.entryTagsInput.Reset()
 
 					// Prepend new entry to the list and focus it
 					m.entries = append([]memories.Entry{entry}, m.entries...)
@@ -325,12 +358,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.entryCreatingStep = 0
 				m.entryTitleInput.Reset()
 				m.entryContentInput.Reset()
+				m.entryTagsInput.Reset()
 			}
 
 			// If still in creating mode, route character input to the appropriate text field
 			var cmd tea.Cmd
 			if m.entryCreatingStep == 0 {
 				m.entryTitleInput, cmd = m.entryTitleInput.Update(msg)
+			} else if m.entryCreatingStep == 1 {
+				m.entryTagsInput, cmd = m.entryTagsInput.Update(msg)
 			} else {
 				m.entryContentInput, cmd = m.entryContentInput.Update(msg)
 			}
@@ -509,6 +545,7 @@ func (m model) View() string {
 	m.journalDescInput.Width = rightWidth - m.bordersAndPaddingWidth
 	m.entryTitleInput.Width = rightWidth - m.bordersAndPaddingWidth
 	m.entryContentInput.Width = rightWidth - m.bordersAndPaddingWidth
+	m.entryTagsInput.Width = rightWidth - m.bordersAndPaddingWidth
 
 	// Left Column: Journals list and Info panel
 	var journalsBuilder, infoBuilder strings.Builder
@@ -637,6 +674,7 @@ func (m model) View() string {
 	} else if m.entryCreating {
 		// Show the form for creating a new entry
 		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Title: ") + m.entryTitleInput.View() + "\n")
+		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Tags: ") + m.entryTagsInput.View() + "\n")
 		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Content: ") + m.entryContentInput.View() + "\n\n")
 		rightBuilder.WriteString("(enter to submit, esc to cancel)")
 
