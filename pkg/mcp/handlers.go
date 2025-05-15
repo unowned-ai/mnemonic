@@ -15,10 +15,12 @@ import (
 const DefaultJournalName = "memory"
 
 // RegisterPingTool registers a minimal health-check tool.
+// This tool can be used to verify the Recall MCP server is alive and responsive,
+// ensuring that the conversational memory and context management features are available.
 func RegisterPingTool(s *server.MCPServer) {
 	pingTool := mcp.NewTool(
 		"ping",
-		mcp.WithDescription("Responds with 'pong' to verify the Recall MCP server is alive."),
+		mcp.WithDescription("Responds with 'pong' to verify the Recall MCP server (your conversational memory and context assistant) is alive and ready to help."),
 	)
 	s.AddTool(pingTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultText("pong_recall"), nil
@@ -26,12 +28,14 @@ func RegisterPingTool(s *server.MCPServer) {
 }
 
 // RegisterCreateJournalTool registers the create_journal tool.
+// Journals are fundamental for organizing your thoughts, project contexts, and conversation histories.
+// Use this tool to create new journals to better structure and manage your recallable information.
 func RegisterCreateJournalTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"create_journal",
-		mcp.WithDescription("Creates a new journal."),
-		mcp.WithString("name", mcp.Required(), mcp.Description("Name for the new journal.")),
-		mcp.WithString("description", mcp.Description("Optional description for the journal.")),
+		mcp.WithDescription("Creates a new journal to organize your memories, project contexts, or conversation snippets. Essential for structuring your second brain."),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Name for the new journal. Choose a name that reflects the type of information you want to store, e.g., 'Project Alpha Notes', 'Daily Reflections', 'Meeting Summaries'.")),
+		mcp.WithString("description", mcp.Description("Optional description for the journal. Use this to add more context about the journal's purpose or content.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		name, _ := request.Params.Arguments["name"].(string)
@@ -50,10 +54,12 @@ func RegisterCreateJournalTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterListJournalsTool lists all journals (active & inactive).
+// Useful for getting an overview of all your structured memory spaces.
+// Call this to see where your information is organized and to decide where to store or retrieve context.
 func RegisterListJournalsTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"list_journals",
-		mcp.WithDescription("Lists all available journals."),
+		mcp.WithDescription("Lists all your available journals. Use this to see how your conversational memory is organized and to find specific context areas."),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		journals, err := memories.ListJournals(ctx, db, false)
@@ -69,11 +75,12 @@ func RegisterListJournalsTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterGetJournalTool retrieves a journal by name.
+// Use this to get details about a specific journal, like its description, to understand its purpose for storing memories or context.
 func RegisterGetJournalTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"get_journal",
-		mcp.WithDescription("Retrieves details for a specific journal by its name."),
-		mcp.WithString("name", mcp.Required(), mcp.Description("The name of the journal to retrieve.")),
+		mcp.WithDescription("Retrieves details for a specific journal by its name. Helps you understand the purpose and content of a particular memory or context space."),
+		mcp.WithString("name", mcp.Required(), mcp.Description("The name of the journal to retrieve. This should be an existing journal name obtained from list_journals or a known journal for your context.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		name, _ := request.Params.Arguments["name"].(string)
@@ -93,14 +100,16 @@ func RegisterGetJournalTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterUpdateJournalTool updates journal metadata.
+// Keep your memory organization up-to-date by renaming journals, updating their descriptions, or changing their active status.
+// This helps in maintaining a clear and relevant structure for your contextual information.
 func RegisterUpdateJournalTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"update_journal",
-		mcp.WithDescription("Updates an existing journal's name, description, or active status."),
-		mcp.WithString("name", mcp.Required(), mcp.Description("Current name of the journal.")),
-		mcp.WithString("new_name", mcp.Description("Optional new name for the journal.")),
-		mcp.WithString("description", mcp.Description("Optional new description.")),
-		mcp.WithBoolean("active", mcp.Description("Optional new active status (true/false).")),
+		mcp.WithDescription("Updates an existing journal's name, description, or active status. Use this to refine the organization of your conversational memories and context."),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Current name of the journal you want to update. This is your reference to the memory space.")),
+		mcp.WithString("new_name", mcp.Description("Optional new name for the journal. Change this if the journal's purpose or content focus has evolved.")),
+		mcp.WithString("description", mcp.Description("Optional new description. Update this to better reflect the kind of information stored within this memory space.")),
+		mcp.WithBoolean("active", mcp.Description("Optional new active status (true/false). Set to false to archive a journal you no longer frequently access but want to keep for future reference.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		name, _ := request.Params.Arguments["name"].(string)
@@ -136,11 +145,13 @@ func RegisterUpdateJournalTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterDeleteJournalTool deletes a journal by name (except the default).
+// Use this to remove journals that are no longer relevant, helping to keep your memory space clean and focused.
+// Note: Deleting a journal also deletes all its entries (memories/context snippets).
 func RegisterDeleteJournalTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"delete_journal",
-		mcp.WithDescription("Deletes a journal and all its associated entries."),
-		mcp.WithString("name", mcp.Required(), mcp.Description("The name of the journal to delete.")),
+		mcp.WithDescription("Deletes a journal and all its associated entries. Use to remove outdated or irrelevant memory spaces. The default journal cannot be deleted."),
+		mcp.WithString("name", mcp.Required(), mcp.Description("The name of the journal to delete. Be sure this is the correct journal as this action also removes all its stored memories.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		name, _ := request.Params.Arguments["name"].(string)
@@ -185,15 +196,17 @@ func enrichEntry(ctx context.Context, db *sql.DB, e memories.Entry) (entryWithTa
 }
 
 // RegisterCreateEntryTool registers the create_entry tool.
+// This is a core function for populating your conversational memory.
+// Use it frequently to save snippets of conversations, important facts, code examples, or any piece of context you want to recall later.
 func RegisterCreateEntryTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"create_entry",
-		mcp.WithDescription("Creates a new entry within a journal."),
-		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal name.")),
-		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Title for the new entry.")),
-		mcp.WithString("content", mcp.Required(), mcp.Description("Content for the new entry.")),
-		mcp.WithString("content_type", mcp.DefaultString("text/plain"), mcp.Description("Optional content type.")),
-		mcp.WithString("tags", mcp.Description("Optional comma-separated tags.")),
+		mcp.WithDescription("Creates a new entry (a piece of memory or context) within a journal. Your primary tool for saving information to your second brain."),
+		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal name. Defaults to 'memory'. Specify a journal to organize this piece of information.")),
+		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Title for the new entry. Make it descriptive for easy recall, e.g., 'Key takeaways from API design meeting', 'Python snippet for S3 upload'.")),
+		mcp.WithString("content", mcp.Required(), mcp.Description("Content for the new entry. This is the actual information you want to save and recall later.")),
+		mcp.WithString("content_type", mcp.DefaultString("text/plain"), mcp.Description("Optional content type (e.g., 'text/markdown', 'application/json'). Helps in interpreting the content later.")),
+		mcp.WithString("tags", mcp.Description("Optional comma-separated tags (e.g., 'project-x,bugfix,api'). Tags make your memories easily searchable and connect related pieces of context.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		journalName, _ := request.Params.Arguments["journal_name"].(string)
@@ -236,12 +249,14 @@ func RegisterCreateEntryTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterListEntriesTool registers list_entries (filter by journal or tags).
+// Essential for retrieving stored memories and context.
+// Use filters to narrow down your search and find the exact piece of information you need from your second brain.
 func RegisterListEntriesTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"list_entries",
-		mcp.WithDescription("Lists entries, optionally filtered by journal and/or tags."),
-		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal filter.")),
-		mcp.WithString("tags", mcp.Description("Optional comma-separated tags list.")),
+		mcp.WithDescription("Lists entries (memories/context snippets), optionally filtered by journal and/or tags. Your main tool for retrieving information from your conversational memory."),
+		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal filter. Specify a journal to list memories only from that context space.")),
+		mcp.WithString("tags", mcp.Description("Optional comma-separated tags list (e.g., 'project-x,urgent'). Use tags to find specific or related pieces of information across your memories.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		journalName, _ := request.Params.Arguments["journal_name"].(string)
@@ -317,12 +332,14 @@ func hasAllTags(entryTags []memories.Tag, desired []string) bool {
 }
 
 // RegisterGetEntryTool fetches entry by title.
+// Allows you to retrieve a specific piece of memory or context when you know its title.
+// Useful for focused recall of information.
 func RegisterGetEntryTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"get_entry",
-		mcp.WithDescription("Retrieves entry details (including content and tags) by title."),
-		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal.")),
-		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Title of the entry.")),
+		mcp.WithDescription("Retrieves a specific entry (memory/context) by its title. Use this for targeted recall when you know what you're looking for."),
+		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal. Specify if you know which memory space the entry resides in.")),
+		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Title of the entry. Must be an exact match to the title used when creating the memory.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		journalName, _ := request.Params.Arguments["journal_name"].(string)
@@ -354,15 +371,17 @@ func RegisterGetEntryTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterUpdateEntryTool updates an entry.
+// Memories and context evolve. Use this tool to update existing entries with new information, titles, or content types.
+// Keeps your recallable information accurate and current.
 func RegisterUpdateEntryTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"update_entry",
-		mcp.WithDescription("Updates an existing entry."),
-		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal.")),
-		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Current title of the entry.")),
-		mcp.WithString("new_title", mcp.Description("Optional new title.")),
-		mcp.WithString("new_content", mcp.Description("Optional new content.")),
-		mcp.WithString("new_content_type", mcp.Description("Optional new content type.")),
+		mcp.WithDescription("Updates an existing entry (memory/context). Use this to modify or add to information you've previously saved, keeping your second brain up-to-date."),
+		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal. Helps locate the entry if it's not in the default 'memory' journal.")),
+		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Current title of the entry you want to update. This is how you identify the memory to change.")),
+		mcp.WithString("new_title", mcp.Description("Optional new title. Useful if the context of the memory has shifted or for better organization.")),
+		mcp.WithString("new_content", mcp.Description("Optional new content. Update the core information of the memory here.")),
+		mcp.WithString("new_content_type", mcp.Description("Optional new content type. Change if the format of the stored information has changed (e.g., from 'text/plain' to 'text/markdown'.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		journalName, _ := request.Params.Arguments["journal_name"].(string)
@@ -399,12 +418,14 @@ func RegisterUpdateEntryTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterDeleteEntryTool deletes an entry by title.
+// Remove memories or context snippets that are no longer needed or have become outdated.
+// Helps keep your conversational memory focused and relevant.
 func RegisterDeleteEntryTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"delete_entry",
-		mcp.WithDescription("Deletes an entry by title inside a journal."),
-		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal.")),
-		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Title of the entry to delete.")),
+		mcp.WithDescription("Deletes an entry (memory/context) by its title. Use this to remove information that is no longer relevant from your second brain."),
+		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal. Specify to ensure you delete the entry from the correct memory space.")),
+		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Title of the entry to delete. Double-check the title to avoid accidental deletion of important memories.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		journalName, _ := request.Params.Arguments["journal_name"].(string)
@@ -434,14 +455,16 @@ func RegisterDeleteEntryTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterManageEntryTagsTool adds/removes tags for an entry.
+// Tags are crucial for creating relationships between memories and enabling powerful, context-aware searches.
+// Use this tool to refine the way your memories are interconnected and discovered.
 func RegisterManageEntryTagsTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"manage_entry_tags",
-		mcp.WithDescription("Adds or removes tags for a specific entry."),
-		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal.")),
-		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Title of the entry.")),
-		mcp.WithString("add_tags", mcp.Description("Comma-separated tags to add.")),
-		mcp.WithString("remove_tags", mcp.Description("Comma-separated tags to remove.")),
+		mcp.WithDescription("Adds or removes tags for a specific entry (memory/context). Tags are keywords that help you categorize, connect, and search your saved information effectively."),
+		mcp.WithString("journal_name", mcp.DefaultString(DefaultJournalName), mcp.Description("Optional journal. Helps locate the entry if it's not in the default 'memory' journal.")),
+		mcp.WithString("entry_title", mcp.Required(), mcp.Description("Title of the entry whose tags you want to manage. Identifies the specific memory you're working with.")),
+		mcp.WithString("add_tags", mcp.Description("Comma-separated tags to add (e.g., 'important,follow-up,idea'). Adding relevant tags improves the discoverability of this memory.")),
+		mcp.WithString("remove_tags", mcp.Description("Comma-separated tags to remove. Removing tags can help if a memory's categorization has changed or to declutter search results.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		journalName, _ := request.Params.Arguments["journal_name"].(string)
@@ -482,10 +505,12 @@ func RegisterManageEntryTagsTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterListTagsTool lists all distinct tags across the database.
+// Provides an overview of all keywords used to categorize your memories.
+// Useful for understanding your current tagging system and for finding relevant tags to use in searches or when creating new entries.
 func RegisterListTagsTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"list_tags",
-		mcp.WithDescription("Lists all unique tags currently stored in the database."),
+		mcp.WithDescription("Lists all unique tags currently stored in your conversational memory. Useful for discovering existing categories or finding relevant tags for searching or creating new memories."),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		rows, err := db.QueryContext(ctx, "SELECT tag, created_at, updated_at FROM tags ORDER BY tag")
@@ -510,11 +535,13 @@ func RegisterListTagsTool(s *server.MCPServer, db *sql.DB) {
 }
 
 // RegisterSearchEntriesTool searches entries by tags across all journals.
+// A powerful way to retrieve contextually related information by combining multiple tags.
+// This allows for complex queries to find precisely the memories or context snippets you need.
 func RegisterSearchEntriesTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"search_entries",
-		mcp.WithDescription("Searches for entries matching all specified tags across all journals."),
-		mcp.WithString("tags", mcp.Required(), mcp.Description("Comma-separated list of tags.")),
+		mcp.WithDescription("Searches for entries (memories/context) matching ALL specified tags across all journals. A powerful tool to find interconnected pieces of information in your second brain."),
+		mcp.WithString("tags", mcp.Required(), mcp.Description("Comma-separated list of tags (e.g., 'project-x,api,urgent'). Entries matching all these tags will be returned.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		tagsStr, _ := request.Params.Arguments["tags"].(string)
