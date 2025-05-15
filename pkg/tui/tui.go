@@ -45,6 +45,11 @@ type model struct {
 	journalDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
 	entryCursor           int // Index of selected entry
+	entryCreating         bool
+	entryCreatingStep     int // 0 = editing entry title, 1 = editing entry content
+	entryCreatingError    string
+	entryTitleInput       textinput.Model
+	entryContentInput     textinput.Model
 	entryDeleting         bool
 	entryDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
@@ -73,6 +78,16 @@ func initModel(db *sql.DB) model {
 	jtdesc.Placeholder = "Description of the journal (optional)"
 	jtdesc.CharLimit = 512
 
+	// Initialize text input fields for the new entry form
+	ettitle := textinput.New()
+	ettitle.Placeholder = "Entry Title"
+	ettitle.Focus() // focus name field initially
+	ettitle.CharLimit = 256
+
+	etcont := textinput.New()
+	etcont.Placeholder = "Entry content"
+	etcont.CharLimit = 10240
+
 	return model{
 		journals: []memories.Journal{},
 		entries:  []memories.Entry{},
@@ -92,7 +107,9 @@ func initModel(db *sql.DB) model {
 		journalNameInput: jtname,
 		journalDescInput: jtdesc,
 
-		entryCursor: 0,
+		entryCursor:       0,
+		entryTitleInput:   ettitle,
+		entryContentInput: etcont,
 
 		marqueeOffset: 0,
 		marqueeTimer:  0,
@@ -173,16 +190,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.journalNameInput.Value(), m.journalDescInput.Value())
 					if err != nil {
 						m.err = err
-					} else {
-						// Prepend new journal to the list and focus it
-						m.journals = append([]memories.Journal{journal}, m.journals...)
-						m.journalCursor = 0 // highlight the newly created journal
+						return m, nil
 					}
+
 					// Exit create mode and reset form inputs
 					m.journalCreating = false
 					m.journalCreatingStep = 0
 					m.journalNameInput.Reset()
 					m.journalDescInput.Reset()
+
+					// Prepend new journal to the list and focus it
+					m.journals = append([]memories.Journal{journal}, m.journals...)
+					m.journalCursor = 0 // highlight the newly created journal
+					m.columnFocus = 0
+
+					// Empty entry list and current entry
+					m.entries = []memories.Entry{}
+					m.currentEntry = entryDetailsMsg{}
+					return m, nil
 				}
 
 			case tea.KeyEsc:
@@ -252,6 +277,64 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, nil
+		}
+
+		if m.entryCreating {
+			switch msg.Type {
+			case tea.KeyEnter:
+				if m.entryCreatingStep == 0 {
+					// Validate that the entry title is not empty
+					if m.entryTitleInput.Value() == "" {
+						m.entryCreatingError = "Entry title cannot be empty"
+						return m, nil
+					}
+
+					// Press Enter on name field -> move to content field
+					m.entryCreatingError = ""
+					m.entryCreatingStep = 1
+					m.entryTitleInput.Blur()
+					m.entryContentInput.Focus()
+				} else {
+					// Press Enter on content field -> submit the form (create entry)
+					entry, err := memories.CreateEntry(context.Background(), m.db, m.journals[m.journalCursor].ID,
+						m.entryTitleInput.Value(), m.entryContentInput.Value(), "text/plain")
+					if err != nil {
+						m.err = err
+						return m, nil
+					}
+
+					// Exit create mode and reset form inputs
+					m.entryCreating = false
+					m.entryCreatingStep = 0
+					m.entryTitleInput.Reset()
+					m.entryContentInput.Reset()
+
+					// Prepend new entry to the list and focus it
+					m.entries = append([]memories.Entry{entry}, m.entries...)
+					m.entryCursor = 0 // highlight the newly created entry
+					m.columnFocus = 1 // focus the entries column
+
+					// Empty old current entry and fetch details of newly created
+					m.currentEntry = entryDetailsMsg{}
+					return m, getEntryDetails(m.db, m.entries[m.entryCursor].ID)
+				}
+
+			case tea.KeyEsc:
+				// Cancel entry creation and reset form inputs
+				m.entryCreating = false
+				m.entryCreatingStep = 0
+				m.entryTitleInput.Reset()
+				m.entryContentInput.Reset()
+			}
+
+			// If still in creating mode, route character input to the appropriate text field
+			var cmd tea.Cmd
+			if m.entryCreatingStep == 0 {
+				m.entryTitleInput, cmd = m.entryTitleInput.Update(msg)
+			} else {
+				m.entryContentInput, cmd = m.entryContentInput.Update(msg)
+			}
+			return m, cmd
 		}
 
 		if m.entryDeleting {
@@ -342,15 +425,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "right", "l":
-			// Move selection right to other column
 			if m.columnFocus < 1 {
+				m.entryCursor = 0
+				m.columnFocus++
 				if len(m.entries) > 0 {
-					// Moved focus to entries - auto-select the first entry and load it
-					m.columnFocus++
-					m.entryCursor = 0
 					return m, getEntryDetails(m.db, m.entries[0].ID)
 				}
-
 			}
 			return m, nil
 
@@ -362,13 +442,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "n":
-			m.journalCreatingStep = 0
-			m.journalNameInput.Reset()
-			m.journalDescInput.Reset()
-			m.journalDescInput.Blur()  // Ensure description input is not focused
-			m.journalNameInput.Focus() // Make sure to focus the name input
-
-			m.journalCreating = true
+			if m.columnFocus == 0 {
+				m.journalCreatingStep = 0
+				m.journalNameInput.Reset()
+				m.journalDescInput.Reset()
+				m.journalDescInput.Blur()  // Ensure description input is not focused
+				m.journalNameInput.Focus() // Make sure to focus the name input
+				m.journalCreating = true
+			} else if m.columnFocus == 1 {
+				m.entryCreatingStep = 0
+				m.entryTitleInput.Reset()
+				m.entryContentInput.Reset()
+				m.entryContentInput.Blur()
+				m.entryTitleInput.Focus()
+				m.entryCreating = true
+			}
 
 		case "d":
 			if m.columnFocus == 0 && len(m.journals) > 0 {
@@ -419,6 +507,8 @@ func (m model) View() string {
 	// Update input widths to match right pane
 	m.journalNameInput.Width = rightWidth - m.bordersAndPaddingWidth
 	m.journalDescInput.Width = rightWidth - m.bordersAndPaddingWidth
+	m.entryTitleInput.Width = rightWidth - m.bordersAndPaddingWidth
+	m.entryContentInput.Width = rightWidth - m.bordersAndPaddingWidth
 
 	// Left Column: Journals list and Info panel
 	var journalsBuilder, infoBuilder strings.Builder
@@ -510,6 +600,9 @@ func (m model) View() string {
 	if m.journalDeleting {
 		rightBuilderSubtitleText = "Delete Journal"
 	}
+	if m.entryCreating {
+		rightBuilderSubtitleText = "Create New Entry"
+	}
 	if m.entryDeleting {
 		rightBuilderSubtitleText = "Delete Entry"
 	}
@@ -541,6 +634,17 @@ func (m model) View() string {
 		}
 		rightBuilder.WriteString(fmt.Sprintf("%s\n%s\n\n", yesOpt, noOpt))
 		rightBuilder.WriteString("(enter to confirm, esc to cancel, up/down to switch)")
+	} else if m.entryCreating {
+		// Show the form for creating a new entry
+		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Title: ") + m.entryTitleInput.View() + "\n")
+		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Content: ") + m.entryContentInput.View() + "\n\n")
+		rightBuilder.WriteString("(enter to submit, esc to cancel)")
+
+		if m.entryCreatingError != "" {
+			rightBuilder.WriteString("\n\n" +
+				textRedStyle.
+					Render(m.entryCreatingError) + "\n")
+		}
 	} else if m.entryDeleting {
 		// Show delete confirmation prompt for entry
 		rightBuilder.WriteString(elemTitleHeaderStyle.Render("Title: ") + textStyle.

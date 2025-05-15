@@ -7,7 +7,7 @@ rebuild: clean build
 bin/recall:
 	mkdir -p bin
 	go mod tidy
-	go build -o bin/recall ./cmd/recall
+	go build -tags tui -o bin/recall ./cmd/recall
 
 format:
 	gofmt -w .
