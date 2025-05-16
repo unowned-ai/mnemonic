@@ -101,6 +101,10 @@ func initModel(db *sql.DB) model {
 	ettags.Placeholder = "Tags (comma or space separated)"
 	ettags.CharLimit = 1024
 
+	vp := viewport.New(0, 0)
+	vp.YPosition = 0
+	vp.SetContent("")
+
 	return model{
 		journals: []memories.Journal{},
 		entries:  []memories.Entry{},
@@ -125,7 +129,7 @@ func initModel(db *sql.DB) model {
 		entryContentInput: etcont,
 		entryTagsInput:    ettags,
 
-		contentViewport: viewport.New(0, 0),
+		contentViewport: vp,
 
 		marqueeOffset: 0,
 		marqueeTimer:  0,
@@ -197,7 +201,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Store the full entry and tags in the model for the detail view
 		m.currentEntry = msg
 		// Initialize viewport with the content when entry is loaded
-		m.contentViewport.SetContent(textStyle.Render(m.currentEntry.entry.Content))
+		wrappedContent := lipgloss.NewStyle().
+			Width(m.contentViewport.Width). // Set width to force wrapping
+			Render(textStyle.Render(m.currentEntry.entry.Content))
+		m.contentViewport.SetContent(wrappedContent)
 		m.contentViewport.GotoTop()
 
 		return m, nil
@@ -1103,8 +1110,11 @@ func updateContentWithCursor(m *model) {
 		display = content
 	}
 
-	// Update viewport content
-	m.contentViewport.SetContent(textStyle.Render(display))
+	// Update viewport content with word wrap
+	wrappedContent := lipgloss.NewStyle().
+		Width(m.contentViewport.Width). // Set width to force wrapping
+		Render(textStyle.Render(display))
+	m.contentViewport.SetContent(wrappedContent)
 
 	// Check if cursor is beyond viewport and scroll if needed
 	cursorLine := getLineNumber(content, m.editCursorPos)
