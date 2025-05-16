@@ -44,7 +44,9 @@ go.work
 .secrets/
 *.env
 
-
+# AI
+.cursor/
 scratch/
 **/.claude/settings.local.json
+
 bin/
