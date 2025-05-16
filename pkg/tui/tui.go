@@ -24,6 +24,11 @@ type model struct {
 
 	currentEntry entryDetailsMsg // Currently loaded entry details
 
+	contentViewport   viewport.Model
+	contentEditing    bool // true if entry content is in edit mode
+	editCursorPos     int  // cursor position in content (rune index)
+	editCursorVisible bool // whether cursor is shown
+
 	columnFocus int // 0 = journals, 1 = entries, 2 = entry details and manipulations
 	width       int // Current terminal width (for layout)
 	height      int // Current terminal height
@@ -56,8 +61,6 @@ type model struct {
 	entryDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
 	dynamicWidth bool // Toggle for dynamic column widths
-
-	contentViewport viewport.Model
 
 	// Animation state
 	marqueeOffset int
@@ -456,15 +459,175 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If we're in the content view and an entry is loaded, handle viewport scrolling
 		if m.columnFocus == 2 && m.currentEntry.entry.ID != uuid.Nil {
 			var cmd tea.Cmd
-			m.contentViewport, cmd = m.contentViewport.Update(msg)
-			cmds = append(cmds, cmd)
 
-			// Still handle left/right navigation
+			if m.contentEditing {
+				// In edit mode, don't pass key events to viewport
+				switch msg.Type {
+				case tea.KeyRunes:
+					// Insert typed characters at cursor position
+					runes := []rune(m.currentEntry.entry.Content)
+					if m.editCursorPos >= len(runes) {
+						// At or past the end, just append
+						runes = append(runes, msg.Runes...)
+					} else {
+						// Insert at cursor position without duplication
+						newRunes := make([]rune, 0, len(runes)+len(msg.Runes))
+						newRunes = append(newRunes, runes[:m.editCursorPos]...)
+						newRunes = append(newRunes, msg.Runes...)
+						newRunes = append(newRunes, runes[m.editCursorPos:]...)
+						runes = newRunes
+					}
+					m.currentEntry.entry.Content = string(runes)
+					m.editCursorPos += len(msg.Runes)
+					m.editCursorVisible = true
+				case tea.KeyBackspace:
+					if m.editCursorPos > 0 {
+						runes := []rune(m.currentEntry.entry.Content)
+						before := runes[:m.editCursorPos-1]
+						after := runes[m.editCursorPos:]
+						m.currentEntry.entry.Content = string(append(before, after...))
+						m.editCursorPos--
+						m.editCursorVisible = true
+					}
+				case tea.KeyDelete:
+					runes := []rune(m.currentEntry.entry.Content)
+					if m.editCursorPos < len(runes) {
+						before := runes[:m.editCursorPos]
+						after := runes[m.editCursorPos+1:]
+						m.currentEntry.entry.Content = string(append(before, after...))
+						m.editCursorVisible = true
+					}
+				case tea.KeyLeft:
+					if m.editCursorPos > 0 {
+						m.editCursorPos--
+						m.editCursorVisible = true
+					}
+				case tea.KeyRight:
+					runes := []rune(m.currentEntry.entry.Content)
+					if m.editCursorPos < len(runes) {
+						m.editCursorPos++
+						m.editCursorVisible = true
+					}
+				case tea.KeyUp:
+					// Find the previous line's equivalent position
+					content := m.currentEntry.entry.Content
+					runes := []rune(content)
+					currentLine := getLineNumber(content, m.editCursorPos)
+					if currentLine > 0 {
+						// Find start of current line
+						lineStart := m.editCursorPos
+						for lineStart > 0 && runes[lineStart-1] != '\n' {
+							lineStart--
+						}
+						// Find start of previous line
+						prevLineStart := lineStart - 1
+						for prevLineStart > 0 && runes[prevLineStart-1] != '\n' {
+							prevLineStart--
+						}
+
+						// First move cursor
+						offset := m.editCursorPos - lineStart
+						if prevLineStart+offset < lineStart {
+							m.editCursorPos = prevLineStart + offset
+						} else {
+							m.editCursorPos = lineStart - 1
+						}
+						m.editCursorVisible = true
+
+						// Then check if we need to scroll
+						cursorLine := getLineNumber(content, m.editCursorPos)
+						if cursorLine < m.contentViewport.YOffset {
+							m.contentViewport.ScrollUp(1)
+						}
+					}
+				case tea.KeyDown:
+					// Find the next line's equivalent position
+					content := m.currentEntry.entry.Content
+					runes := []rune(content)
+					// Find start of current line
+					lineStart := m.editCursorPos
+					for lineStart > 0 && runes[lineStart-1] != '\n' {
+						lineStart--
+					}
+					// Find start of next line
+					nextLineStart := m.editCursorPos
+					for nextLineStart < len(runes) && runes[nextLineStart] != '\n' {
+						nextLineStart++
+					}
+					if nextLineStart < len(runes) {
+						nextLineStart++ // Move past the newline
+						// Calculate position in next line
+						offset := m.editCursorPos - lineStart
+						nextLineEnd := nextLineStart
+						for nextLineEnd < len(runes) && runes[nextLineEnd] != '\n' {
+							nextLineEnd++
+						}
+						if nextLineStart+offset < nextLineEnd {
+							m.editCursorPos = nextLineStart + offset
+						} else {
+							m.editCursorPos = nextLineEnd
+						}
+						m.editCursorVisible = true
+
+						// Check if we need to scroll the viewport
+						cursorLine := getLineNumber(content, m.editCursorPos)
+						visibleLines := m.contentViewport.Height
+						if cursorLine >= m.contentViewport.YOffset+visibleLines {
+							m.contentViewport.ScrollDown(1)
+						}
+					}
+				case tea.KeyEnter:
+					// Insert newline at cursor position
+					runes := []rune(m.currentEntry.entry.Content)
+					if m.editCursorPos == len(runes) {
+						// At the end, just append newline
+						runes = append(runes, '\n')
+					} else {
+						// Insert newline before current character
+						before := runes[:m.editCursorPos]
+						after := runes[m.editCursorPos:]
+						runes = append(before, append([]rune{'\n'}, after...)...)
+					}
+					m.currentEntry.entry.Content = string(runes)
+					m.editCursorPos++
+					m.editCursorVisible = true
+
+					// Update viewport content with cursor
+					updateContentWithCursor(&m)
+				case tea.KeyEsc:
+					// Exit edit mode
+					m.contentEditing = false
+				}
+				// Update viewport content with cursor
+				updateContentWithCursor(&m)
+				return m, tea.Batch(cmds...)
+			} else {
+				// In normal mode, only pass navigation keys to viewport
+				switch msg.Type {
+				case tea.KeyUp, tea.KeyDown, tea.KeyHome, tea.KeyEnd:
+					m.contentViewport, cmd = m.contentViewport.Update(msg)
+					cmds = append(cmds, cmd)
+				}
+			}
+
+			// Handle mode switching and other commands
 			switch msg.String() {
+			case "enter", "i":
+				if !m.contentEditing {
+					m.contentEditing = true
+					m.editCursorPos = 0
+					m.editCursorVisible = true
+					m.contentViewport.GotoTop()
+					updateContentWithCursor(&m)
+				}
 			case "left", "h":
-				m.columnFocus--
-			case "right", "l":
-				// Already at rightmost column
+				if !m.contentEditing {
+					m.columnFocus--
+				}
+			case "q", "ctrl+c":
+				m.quitting = true
+				// Exit alt screen before quitting so the goodbye message displays
+				return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -827,7 +990,7 @@ func (m model) View() string {
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, middlePanel, rightPanel)
 
 	// Footer with usage instructions
-	footerText := "\n↑/↓ to navigate • Enter to select • n to create • d to delete • z to toggle layout • q to quit"
+	footerText := "\n↑/↓ to navigate • n to create • d to delete • i to edit • z to toggle layout • esc to apply and exit edit mode • q to quit"
 	// Render the footer bar (full width)
 	footerBar := footerStyle.Width(m.width).Render(footerText)
 
@@ -864,4 +1027,83 @@ func ShowTUI(db *sql.DB) error {
 	p := tea.NewProgram(initModel(db), tea.WithAltScreen())
 	_, err := p.Run()
 	return err
+}
+
+// Prepare content string with cursor and update viewport
+func updateContentWithCursor(m *model) {
+	content := m.currentEntry.entry.Content
+	runes := []rune(content)
+
+	if m.editCursorPos > len(runes) {
+		m.editCursorPos = len(runes)
+	}
+
+	var display string
+	if m.contentEditing && m.editCursorVisible {
+		if len(runes) == 0 {
+			// If content is empty, show cursor
+			display = lipgloss.NewStyle().
+				Background(lipgloss.Color(colorWhite)).
+				Foreground(lipgloss.Color(colorGray)).
+				Render(" ")
+		} else if m.editCursorPos == len(runes) {
+			// If cursor is at the end, append it
+			display = content + lipgloss.NewStyle().
+				Background(lipgloss.Color(colorWhite)).
+				Foreground(lipgloss.Color(colorGray)).
+				Render(" ")
+		} else {
+			// Highlight the current character by inverting its colors
+			before := string(runes[:m.editCursorPos])
+			cursorChar := string(runes[m.editCursorPos])
+			after := string(runes[m.editCursorPos+1:])
+
+			// Special handling for newline and carriage return
+			var invertedCursor string
+			if cursorChar == "\n" || cursorChar == "\r" {
+				// Show a visible character for newline/carriage return
+				invertedCursor = lipgloss.NewStyle().
+					Background(lipgloss.Color(colorWhite)).
+					Render(" ") // Use pilcrow sign to represent newline
+				// Keep the actual newline after the cursor
+				display = before + invertedCursor + cursorChar + after
+			} else {
+				// Normal character handling
+				invertedCursor = lipgloss.NewStyle().
+					Background(lipgloss.Color(colorWhite)).
+					Foreground(lipgloss.Color(colorGray)).
+					Render(cursorChar)
+				display = before + invertedCursor + after
+			}
+		}
+	} else {
+		display = content
+	}
+
+	// Update viewport content
+	m.contentViewport.SetContent(textStyle.Render(display))
+
+	// Check if cursor is beyond viewport and scroll if needed
+	cursorLine := getLineNumber(content, m.editCursorPos)
+	lastVisibleLine := m.contentViewport.YOffset + m.contentViewport.Height - 1
+
+	if cursorLine > lastVisibleLine {
+		m.contentViewport.ScrollDown(1)
+	}
+}
+
+// Count lines before cursor position
+func getLineNumber(content string, pos int) int {
+	runes := []rune(content)
+	if pos > len(runes) {
+		pos = len(runes)
+	}
+
+	lineCount := 0
+	for i := 0; i < pos; i++ {
+		if runes[i] == '\n' {
+			lineCount++
+		}
+	}
+	return lineCount
 }
