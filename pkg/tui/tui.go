@@ -161,8 +161,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 		// Calculate content viewport height (subtract space used by title and tags)
-		contentHeight := m.height - m.panelHeightPadding - 6 // 6 lines for title and tags sections
-		// TODO: make title and tags section height dynamic
+		// TODO: It is hack, create other viewport both for title and tags
+		contentHeight := m.height - m.panelHeightPadding - 7 // Increased padding to prevent shifting
 		if contentHeight < 0 {
 			contentHeight = 0
 		}
