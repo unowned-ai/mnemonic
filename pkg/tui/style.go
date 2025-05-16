@@ -70,11 +70,39 @@ func generateLinePointer(isPoint bool, length int) string {
 }
 
 // Create a padded version marquee text for scrolling
-func marqueeText(text string, marqueeOffset, padding, availableWidth int) string {
+func (m model) marqueeText(text string, availableWidth int) string {
 	paddedText := text + "    " + text
-	offset := marqueeOffset % (len(text) + padding)
+	offset := m.marqueeOffset % (len(text) + m.bordersAndPaddingWidth)
 	if offset+availableWidth <= len(paddedText) {
 		text = paddedText[offset : offset+availableWidth]
 	}
 	return text
+}
+
+func (m model) dynamicColumnWidth() (int, int, int) {
+	var leftWidth, middleWidth, rightWidth int
+	if m.dynamicWidth {
+		// Dynamic widths based on focus
+		switch m.columnFocus {
+		case 0: // Journals column focused
+			leftWidth = (m.width * 30) / 100   // 30%
+			middleWidth = (m.width * 40) / 100 // 40%
+			rightWidth = (m.width * 30) / 100  // 30%
+		case 1: // Entries column focused
+			leftWidth = (m.width * 20) / 100   // 20%
+			middleWidth = (m.width * 40) / 100 // 40%
+			rightWidth = (m.width * 40) / 100  // 40%
+		case 2: // Entry details focused
+			leftWidth = (m.width * 20) / 100   // 20%
+			middleWidth = (m.width * 20) / 100 // 20%
+			rightWidth = (m.width * 60) / 100  // 60%
+		}
+	} else {
+		// Fixed widths (25%, 25%, 50%)
+		halfWidth := m.width / 2
+		leftWidth = halfWidth / 2                        // 25%
+		middleWidth = halfWidth - leftWidth              // 25%
+		rightWidth = m.width - (leftWidth + middleWidth) // 50%
+	}
+	return leftWidth, middleWidth, rightWidth
 }

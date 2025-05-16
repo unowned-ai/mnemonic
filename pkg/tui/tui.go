@@ -12,6 +12,7 @@ import (
 	"github.com/unowned-ai/recall/pkg/memories"
 
 	textinput "github.com/charmbracelet/bubbles/textinput"
+	viewport "github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
@@ -55,6 +56,8 @@ type model struct {
 	entryDeleteConfirmIdx int // 0 = "Yes" selected, 1 = "No"
 
 	dynamicWidth bool // Toggle for dynamic column widths
+
+	contentViewport viewport.Model
 
 	// Animation state
 	marqueeOffset int
@@ -119,6 +122,8 @@ func initModel(db *sql.DB) model {
 		entryContentInput: etcont,
 		entryTagsInput:    ettags,
 
+		contentViewport: viewport.New(0, 0),
+
 		marqueeOffset: 0,
 		marqueeTimer:  0,
 
@@ -140,11 +145,27 @@ func (m model) Init() tea.Cmd {
 
 // Processes events like window resize, errors, loaded data, and key presses
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Save the new window size in the model for responsive layout
 		m.width = msg.Width
 		m.height = msg.Height
+
+		// Calculate content viewport height (subtract space used by title and tags)
+		contentHeight := m.height - m.panelHeightPadding - 6 // 6 lines for title and tags sections
+		// TODO: make title and tags section height dynamic
+		if contentHeight < 0 {
+			contentHeight = 0
+		}
+
+		// Calculate viewport width based on dynamic width setting
+		_, _, viewportWidth := m.dynamicColumnWidth()
+
+		// Update viewport dimensions
+		m.contentViewport.Width = viewportWidth - m.bordersAndPaddingWidth
+		m.contentViewport.Height = contentHeight
 		return m, nil
 
 	case error:
@@ -172,6 +193,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case entryDetailsMsg:
 		// Store the full entry and tags in the model for the detail view
 		m.currentEntry = msg
+		// Initialize viewport with the content when entry is loaded
+		m.contentViewport.SetContent(textStyle.Render(m.currentEntry.entry.Content))
+		m.contentViewport.GotoTop()
+
 		return m, nil
 
 	// Handle key presses for navigation and input
@@ -428,6 +453,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// If we're in the content view and an entry is loaded, handle viewport scrolling
+		if m.columnFocus == 2 && m.currentEntry.entry.ID != uuid.Nil {
+			var cmd tea.Cmd
+			m.contentViewport, cmd = m.contentViewport.Update(msg)
+			cmds = append(cmds, cmd)
+
+			// Still handle left/right navigation
+			switch msg.String() {
+			case "left", "h":
+				m.columnFocus--
+			case "right", "l":
+				// Already at rightmost column
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 		// Root Navigation Mode
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -455,7 +496,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.journalCursor++
 				return m, listEntries(m.db, m.journals[m.journalCursor].ID, false)
 			}
-
 			if m.columnFocus == 1 && m.entryCursor < len(m.entries)-1 {
 				// Iterating over entries column
 				m.entryCursor++
@@ -550,7 +590,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 	}
 
-	return m, nil
+	return m, tea.Batch(cmds...)
 }
 
 // Assembles the UI string for each frame
@@ -568,31 +608,7 @@ func (m model) View() string {
 	titleBar := titleStyle.Width(m.width).Render(titleText)
 
 	// Calculate column widths based on focus
-	var leftWidth, middleWidth, rightWidth int
-
-	if m.dynamicWidth {
-		// Dynamic widths based on focus
-		switch m.columnFocus {
-		case 0: // Journals column focused
-			leftWidth = (m.width * 30) / 100   // 30%
-			middleWidth = (m.width * 40) / 100 // 40%
-			rightWidth = (m.width * 30) / 100  // 30%
-		case 1: // Entries column focused
-			leftWidth = (m.width * 20) / 100   // 20%
-			middleWidth = (m.width * 40) / 100 // 40%
-			rightWidth = (m.width * 40) / 100  // 40%
-		case 2: // Entry details focused
-			leftWidth = (m.width * 20) / 100   // 20%
-			middleWidth = (m.width * 20) / 100 // 20%
-			rightWidth = (m.width * 60) / 100  // 60%
-		}
-	} else {
-		// Fixed widths (25%, 25%, 50%)
-		halfWidth := m.width / 2
-		leftWidth = halfWidth / 2                        // 25%
-		middleWidth = halfWidth - leftWidth              // 25%
-		rightWidth = m.width - (leftWidth + middleWidth) // 50%
-	}
+	leftWidth, middleWidth, rightWidth := m.dynamicColumnWidth()
 
 	// Account for rounding errors to ensure total width matches screen width
 	remainder := m.width - (leftWidth + middleWidth + rightWidth)
@@ -687,6 +703,7 @@ func (m model) View() string {
 
 	// Right Column: Entry preview or New elements form
 	var rightBuilder strings.Builder
+	var entryTitleBuilder, entryTagsBuilder strings.Builder
 
 	rightBuilderSubtitleText := "Entry"
 	if m.journalCreating {
@@ -757,9 +774,10 @@ func (m model) View() string {
 		rightBuilder.WriteString("(enter to confirm, esc to cancel, up/down to switch)")
 	} else if len(m.journals) > 0 && m.journalCursor <= len(m.journals) {
 		if m.currentEntry.entry.ID != uuid.Nil {
-			rightBuilder.WriteString(elemTitleHeaderStyle.Render("Title: ") + textStyle.Render(m.currentEntry.entry.Title) + "\n\n")
+			// Title section
+			entryTitleBuilder.WriteString(elemTitleHeaderStyle.Render("Title: ") + textStyle.Render(m.currentEntry.entry.Title) + "\n\n")
 
-			// Tags for the entry
+			// Tags section
 			var tagsLine string
 			if len(m.currentEntry.tags) > 0 {
 				tags := []string{}
@@ -770,10 +788,12 @@ func (m model) View() string {
 			} else {
 				tagsLine += "-"
 			}
-			rightBuilder.WriteString(elemTitleHeaderStyle.Render("Tags: ") + multiElemsTitleStyle.Render(tagsLine) + "\n\n")
+			entryTagsBuilder.WriteString(elemTitleHeaderStyle.Render("Tags: ") + multiElemsTitleStyle.Render(tagsLine) + "\n\n")
 
-			// Entry content
-			rightBuilder.WriteString(textStyle.Render(m.currentEntry.entry.Content))
+			// Combine all sections into rightBuilder
+			rightBuilder.WriteString(entryTitleBuilder.String())
+			rightBuilder.WriteString(entryTagsBuilder.String())
+			rightBuilder.WriteString(m.contentViewport.View())
 		} else {
 			rightBuilder.WriteString("Select an entry to view details.")
 		}
@@ -831,7 +851,7 @@ func (m model) ViewListElemNormal(elemName string, builder *strings.Builder, ava
 // View of marquee truncation for selected list element
 func (m model) ViewListElemMarquee(elemName string, builder *strings.Builder, availableWidth int) {
 	if len(elemName) > availableWidth {
-		elemName = marqueeText(elemName, m.marqueeOffset, m.bordersAndPaddingWidth, availableWidth)
+		elemName = m.marqueeText(elemName, availableWidth)
 	}
 	elemName = lipgloss.NewStyle().
 		MaxWidth(availableWidth).
