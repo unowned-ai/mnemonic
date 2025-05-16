@@ -54,6 +54,8 @@ See [MCP Configuration Examples](docs/mcp-config-examples.md) for detailed setup
 
 ## Modules
 
-Could be built with specified tags, like `-tags tui`.
+By default, Recall is built with all modules enabled. You can exclude specific modules using build tags:
 
--   **tui**: Recall TUI is a lightweight, keyboard-driven interface that lets you capture, browse, and preview your memories without leaving the terminal.
+-   **TUI Module**: A lightweight, keyboard-driven interface that lets you capture, browse, and preview your memories without leaving the terminal.
+    -   Included by default
+    -   To build without TUI: `go build -tags notui`

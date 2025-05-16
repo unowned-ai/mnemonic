@@ -1,4 +1,4 @@
-//go:build tui
+//go:build !notui
 
 package main
 
