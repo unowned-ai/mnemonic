@@ -595,8 +595,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Update viewport content with cursor
 					updateContentWithCursor(&m)
 				case tea.KeyEsc:
-					// Exit edit mode
+					// Exit edit mode and update entry in database
+					updatedEntry, err := memories.UpdateEntry(context.Background(), m.db,
+						m.currentEntry.entry.ID,
+						m.currentEntry.entry.Title,
+						m.currentEntry.entry.Content,
+						m.currentEntry.entry.ContentType)
+					if err != nil {
+						m.err = fmt.Errorf("failed to update entry: %v", err)
+						return m, nil
+					}
+					m.currentEntry.entry = updatedEntry
 					m.contentEditing = false
+					// Update the entry in the entries list as well
+					for i := range m.entries {
+						if m.entries[i].ID == updatedEntry.ID {
+							m.entries[i] = updatedEntry
+							break
+						}
+					}
 				}
 				// Update viewport content with cursor
 				updateContentWithCursor(&m)
@@ -869,6 +886,12 @@ func (m model) View() string {
 	var entryTitleBuilder, entryTagsBuilder strings.Builder
 
 	rightBuilderSubtitleText := "Entry"
+	if m.columnFocus == 2 && m.currentEntry.entry.ID != uuid.Nil {
+		rightBuilderSubtitleText = "Entry (view mode)"
+		if m.contentEditing {
+			rightBuilderSubtitleText = "Entry (edit mode)"
+		}
+	}
 	if m.journalCreating {
 		rightBuilderSubtitleText = "Create New Journal"
 	}
