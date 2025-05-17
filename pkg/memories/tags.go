@@ -50,6 +50,11 @@ const (
 	DELETE FROM tags 
 	WHERE tag = ?
 	`
+	
+	listAllTagsStatement = `
+	SELECT tag, created_at, updated_at
+	FROM tags
+	`
 )
 
 func CreateTag(ctx context.Context, db *sql.DB, tagName string) error {
