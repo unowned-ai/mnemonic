@@ -1,20 +1,17 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	recall "github.com/unowned-ai/recall/pkg"
 	pkgdb "github.com/unowned-ai/recall/pkg/db"
+	recallutils "github.com/unowned-ai/recall/pkg/utils"
 
 	"github.com/spf13/cobra"
 )
 
-// Global flags
 var dbPath string
 var walMode bool
 var syncMode string
@@ -24,9 +21,17 @@ var rootCmd = &cobra.Command{
 	Short:   "A self-hostable datastore for your memories to share with your AI models.",
 	Long:    ``,
 	Version: fmt.Sprintf("v%s", recall.Version),
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// This is a good place to ensure dbPath is usable if needed globally before RunE
-		// For now, openDB handles the check.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		switch cmd.Name() {
+		case "completion", "version", cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd:
+			return nil
+		}
+		resolvedPath, err := recallutils.ResolveAndEnsureDBPath(dbPath)
+		if err != nil {
+			return fmt.Errorf("error preparing database path: %w", err)
+		}
+		dbPath = resolvedPath
+		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -97,52 +102,33 @@ var dbCmd = &cobra.Command{
 var dbUpgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade the Recall database schema to the latest version for the memoriesdb component",
-	Long: `Connects to the SQLite database at the specified path (provided with the --db flag) and applies any necessary
-schema migrations to bring the memoriesdb component up to the current application schema version.
+	Long: `Connects to the SQLite database at the specified path (or system default if --db is not provided)
+and applies any necessary schema migrations to bring the memoriesdb component up to the current application schema version.
 If the database does not exist or is uninitialized for this component, it will be created
 and initialized with the latest schema for the memoriesdb component.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// These flags are defined locally for dbUpgradeCmd but also persistently on rootCmd.
-		// Cobra will use the most local definition when parsing.
-		// For this command, dbPath is marked required locally.
-		localDbPath, _ := cmd.Flags().GetString("db")
-		localWalEnabled, _ := cmd.Flags().GetBool("wal")
-		localSyncMode, _ := cmd.Flags().GetString("sync")
 
-		if localDbPath == "" {
-			// This should be caught by MarkFlagRequired, but as a safeguard:
-			return errors.New("database path is required for db upgrade")
-		}
+		fmt.Printf("Attempting to upgrade memoriesdb component in database at: %s (WAL: %t, Sync: %s)\n", dbPath, walMode, syncMode)
 
-		fmt.Printf("Attempting to upgrade memoriesdb component in database at: %s (WAL: %t, Sync: %s)\n", localDbPath, localWalEnabled, localSyncMode)
-
-		dbConn, err := pkgdb.OpenDBConnection(localDbPath, localWalEnabled, localSyncMode)
+		dbConn, err := pkgdb.OpenDBConnection(dbPath, walMode, syncMode)
 		if err != nil {
 			return err
 		}
 		defer dbConn.Close()
 
-		if err := pkgdb.UpgradeDB(dbConn, localDbPath, pkgdb.TargetSchemaVersion); err != nil {
+		if err := pkgdb.UpgradeDB(dbConn, dbPath, pkgdb.TargetSchemaVersion); err != nil {
 			return err
 		}
-		fmt.Println("Database upgrade successful.")
+		fmt.Println("Database schema upgrade completed successfully for memoriesdb component to version", pkgdb.TargetSchemaVersion)
 		return nil
 	},
 }
 
 func initCmd() {
-	// Define persistent DB flags on rootCmd so all commands can use them
-	// These will populate the global dbPath, walMode, syncMode variables
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (uses system-specific default if not provided)")
-	rootCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode (default true)")
-	rootCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA) (default NORMAL)")
-
-	// dbUpgradeCmd flags (local to the command, but we can let them use the globals too if not set)
-	// However, dbUpgradeCmd specifically marks "db" as required for itself.
-	dbUpgradeCmd.Flags().String("db", "", "Path to the database file (required for db upgrade)")
-	dbUpgradeCmd.Flags().Bool("wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode.")
-	dbUpgradeCmd.Flags().String("sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA).")
-	dbUpgradeCmd.MarkFlagRequired("db") // This applies to dbUpgradeCmd only
+	// package-level flags
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file. Uses a system-specific default if not provided.")
+	rootCmd.PersistentFlags().BoolVar(&walMode, "wal", false, "Enable SQLite WAL (Write-Ahead Logging) mode (default: false)")
+	rootCmd.PersistentFlags().StringVar(&syncMode, "sync", "FULL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA) (default: FULL)")
 
 	dbCmd.AddCommand(dbUpgradeCmd)
 
@@ -150,6 +136,7 @@ func initCmd() {
 	initEntriesCmd()
 	initTagsCmd()
 	initSearchCmd()
+
 	rootCmd.AddCommand(completionCmd, versionCmd, dbCmd, journalsCmd, entriesCmd, tagsCmd, searchCmd, mcpCmd)
 }
 

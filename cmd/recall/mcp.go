@@ -1,13 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
-	pkgdb "github.com/unowned-ai/recall/pkg/db"
 	"github.com/unowned-ai/recall/pkg/mcp"
 )
 
@@ -36,22 +33,8 @@ Example (Server with Memory Aware Tool active):
 	RunE: func(cmd *cobra.Command, args []string) error {
 		memoryAware, _ := cmd.Flags().GetBool("memory-aware")
 
-		// Determine effective DB path using global dbPath (from rootCmd persistent flags)
-		// or default if not set.
-		effectiveDbPath := dbPath
-		if effectiveDbPath == "" {
-			var err error
-			effectiveDbPath, err = pkgdb.DefaultDBPath()
-			if err != nil {
-				return fmt.Errorf("failed to get default DB path: %w", err)
-			}
-			if err := os.MkdirAll(filepath.Dir(effectiveDbPath), 0755); err != nil {
-				return fmt.Errorf("failed to create parent directory for default DB '%s': %w", effectiveDbPath, err)
-			}
-		}
-
-		// Server will always start. NewRecallMCPServer handles DB init & upgrade.
-		srv, err := mcp.NewRecallMCPServer(effectiveDbPath, walMode, syncMode)
+		// Create server wrapper.
+		srv, err := mcp.NewRecallMCPServer(dbPath, walMode, syncMode)
 		if err != nil {
 			return err
 		}
@@ -79,7 +62,7 @@ Example (Server with Memory Aware Tool active):
 		// Conditionally register the memory overview tool
 		if memoryAware {
 			// This function will be created in pkg/mcp/
-			mcp.RegisterMemoryOverviewTool(s, db) 
+			mcp.RegisterMemoryOverviewTool(s, db)
 			fmt.Fprintf(os.Stderr, "Memory Overview tool ('get_memory_overview') is active.\n")
 		}
 
