@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	recall "github.com/unowned-ai/recall/pkg"
@@ -11,6 +13,11 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+// Global flags
+var dbPath string
+var walMode bool
+var syncMode string
 
 var rootCmd = &cobra.Command{
 	Use:     "recall",
@@ -95,43 +102,47 @@ schema migrations to bring the memoriesdb component up to the current applicatio
 If the database does not exist or is uninitialized for this component, it will be created
 and initialized with the latest schema for the memoriesdb component.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		walEnabled, _ := cmd.Flags().GetBool("wal")
-		syncMode, _ := cmd.Flags().GetString("sync")
+		// These flags are defined locally for dbUpgradeCmd but also persistently on rootCmd.
+		// Cobra will use the most local definition when parsing.
+		// For this command, dbPath is marked required locally.
+		localDbPath, _ := cmd.Flags().GetString("db")
+		localWalEnabled, _ := cmd.Flags().GetBool("wal")
+		localSyncMode, _ := cmd.Flags().GetString("sync")
 
-		if dbPath == "" {
-			return errors.New("database path is required")
+		if localDbPath == "" {
+			// This should be caught by MarkFlagRequired, but as a safeguard:
+			return errors.New("database path is required for db upgrade")
 		}
 
-		fmt.Printf("Attempting to upgrade memoriesdb component in database at: %s (WAL: %t, Sync: %s)\n", dbPath, walEnabled, syncMode)
+		fmt.Printf("Attempting to upgrade memoriesdb component in database at: %s (WAL: %t, Sync: %s)\n", localDbPath, localWalEnabled, localSyncMode)
 
-		dbConn, err := pkgdb.OpenDBConnection(dbPath, walEnabled, syncMode)
+		dbConn, err := pkgdb.OpenDBConnection(localDbPath, localWalEnabled, localSyncMode)
 		if err != nil {
 			return err
 		}
 		defer dbConn.Close()
 
-		if err := pkgdb.UpgradeDB(dbConn, dbPath, pkgdb.TargetSchemaVersion); err != nil {
+		if err := pkgdb.UpgradeDB(dbConn, localDbPath, pkgdb.TargetSchemaVersion); err != nil {
 			return err
 		}
+		fmt.Println("Database upgrade successful.")
 		return nil
 	},
 }
 
 func initCmd() {
 	// Define persistent DB flags on rootCmd so all commands can use them
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (optional for mcp command, uses system-specific default if not provided)")
-	rootCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode")
-	rootCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA)")
-	// It's often better to mark required flags on the specific commands that need them,
-	// or use PersistentPreRunE on rootCmd to validate if dbPath is always needed.
-	// For now, individual commands like dbUpgrade, entries, journals, tags, search
-	// will rely on openDB() checking dbPath or their own MarkFlagRequired if they have it.
-	// Or, if "db" is truly global, rootCmd.MarkPersistentFlagRequired("db") could be used.
+	// These will populate the global dbPath, walMode, syncMode variables
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the database file (uses system-specific default if not provided)")
+	rootCmd.PersistentFlags().BoolVar(&walMode, "wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode (default true)")
+	rootCmd.PersistentFlags().StringVar(&syncMode, "sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA) (default NORMAL)")
 
-	dbUpgradeCmd.Flags().StringVar(&dbPath, "db", "", "Path to the database file (required)")
+	// dbUpgradeCmd flags (local to the command, but we can let them use the globals too if not set)
+	// However, dbUpgradeCmd specifically marks "db" as required for itself.
+	dbUpgradeCmd.Flags().String("db", "", "Path to the database file (required for db upgrade)")
 	dbUpgradeCmd.Flags().Bool("wal", true, "Enable SQLite WAL (Write-Ahead Logging) mode.")
 	dbUpgradeCmd.Flags().String("sync", "NORMAL", "SQLite synchronous pragma (OFF, NORMAL, FULL, EXTRA).")
-	dbUpgradeCmd.MarkFlagRequired("db")
+	dbUpgradeCmd.MarkFlagRequired("db") // This applies to dbUpgradeCmd only
 
 	dbCmd.AddCommand(dbUpgradeCmd)
 
@@ -143,7 +154,7 @@ func initCmd() {
 }
 
 func main() {
-	initCmd()
+	initCmd() // Initializes commands and flags
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
