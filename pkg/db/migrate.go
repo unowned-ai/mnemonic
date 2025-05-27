@@ -52,6 +52,10 @@ func InitializeSchema(db *sql.DB, schemaVersionToSet int64) error {
 		return fmt.Errorf("failed to execute schema v1 SQL: %w", err)
 	}
 
+	if err := ensureFTSSupport(db); err != nil {
+		return fmt.Errorf("failed to setup FTS schema: %w", err)
+	}
+
 	// Insert or update the version for the memoriesdb component
 	insertVersionSQL := `
 INSERT INTO recall_versions (component, version) VALUES (?, ?)
@@ -81,13 +85,41 @@ func UpgradeDB(db *sql.DB, dbIdentifierForLog string, appTargetSchemaVersion int
 		if err != nil {
 			return fmt.Errorf("failed to initialize component %s in database '%s': %w", MemoriesDBComponent, dbIdentifierForLog, err)
 		}
-		return nil
+		return ensureFTSSupport(db)
 	} else if currentDBVersion == appTargetSchemaVersion {
 		fmt.Fprintf(os.Stderr, "Component %s in database '%s' is already up to date (schema version %d).\n", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion)
-		return nil
+		return ensureFTSSupport(db)
 	} else if currentDBVersion < appTargetSchemaVersion {
 		return fmt.Errorf("component %s in database '%s' has schema version %d, which is older than application's target schema version %d. Automatic migration from this older version is not yet supported", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion, appTargetSchemaVersion)
 	} else { // currentDBVersion > appTargetSchemaVersion
 		return fmt.Errorf("component %s in database '%s' has schema version %d, which is newer than application's target schema version %d. Please upgrade the application", MemoriesDBComponent, dbIdentifierForLog, currentDBVersion, appTargetSchemaVersion)
 	}
+}
+
+// ensureFTSSupport creates the FTS virtual table and triggers if they do not exist.
+func ensureFTSSupport(db *sql.DB) error {
+	statements := []string{
+		`CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
+                       title,
+                       content,
+                       entry_id UNINDEXED
+               );`,
+		`CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
+                       INSERT INTO entries_fts(rowid, title, content, entry_id)
+                       VALUES (new.rowid, new.title, new.content, new.id);
+               END;`,
+		`CREATE TRIGGER IF NOT EXISTS entries_fts_ad AFTER DELETE ON entries BEGIN
+                       DELETE FROM entries_fts WHERE rowid = old.rowid;
+               END;`,
+		`CREATE TRIGGER IF NOT EXISTS entries_fts_au AFTER UPDATE OF title, content ON entries BEGIN
+                       UPDATE entries_fts SET title = new.title, content = new.content, entry_id = new.id
+                       WHERE rowid = old.rowid;
+               END;`,
+	}
+	for _, stmt := range statements {
+		if _, err := db.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }

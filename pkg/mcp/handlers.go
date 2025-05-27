@@ -513,14 +513,16 @@ func RegisterListTagsTool(s *server.MCPServer, db *sql.DB) {
 func RegisterSearchEntriesTool(s *server.MCPServer, db *sql.DB) {
 	tool := mcp.NewTool(
 		"search_entries",
-		mcp.WithDescription("Searches for entries matching all specified tags across all journals."),
-		mcp.WithString("tags", mcp.Required(), mcp.Description("Comma-separated list of tags.")),
+		mcp.WithDescription("Searches for entries matching tags and/or full text across all journals."),
+		mcp.WithString("tags", mcp.Description("Comma-separated list of tags.")),
+		mcp.WithString("text", mcp.Description("Full text search query.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		tagsStr, _ := request.Params.Arguments["tags"].(string)
+		textQuery, _ := request.Params.Arguments["text"].(string)
 		tagsFilter := parseTags(tagsStr)
-		if len(tagsFilter) == 0 {
-			return mcp.NewToolResultError("'tags' parameter is required and must be non-empty"), nil
+		if len(tagsFilter) == 0 && strings.TrimSpace(textQuery) == "" {
+			return mcp.NewToolResultError("provide 'tags' or 'text' parameter"), nil
 		}
 		journals, err := memories.ListJournals(ctx, db, false)
 		if err != nil {
@@ -528,19 +530,13 @@ func RegisterSearchEntriesTool(s *server.MCPServer, db *sql.DB) {
 		}
 		var matched []entryWithTags
 		for _, j := range journals {
-			entries, err := memories.ListEntries(ctx, db, j.ID, false)
+			results, err := memories.SearchEntries(ctx, db, j.ID, tagsFilter, textQuery)
 			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("Error listing entries: %v", err)), nil
+				return mcp.NewToolResultError(fmt.Sprintf("Error searching entries: %v", err)), nil
 			}
-			for _, e := range entries {
-				entryTags, err := memories.ListTagsForEntry(ctx, db, e.ID)
-				if err != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("Error fetching tags: %v", err)), nil
-				}
-				if hasAllTags(entryTags, tagsFilter) {
-					en, _ := enrichEntry(ctx, db, e)
-					matched = append(matched, en)
-				}
+			for _, r := range results {
+				en, _ := enrichEntry(ctx, db, r.Entry)
+				matched = append(matched, en)
 			}
 		}
 		if len(matched) == 0 {

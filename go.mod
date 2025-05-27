@@ -1,6 +1,6 @@
 module github.com/unowned-ai/recall
 
-go 1.24.2
+go 1.23
 
 replace github.com/unowned-ai/recall/pkg/tui => ./pkg/tui
 

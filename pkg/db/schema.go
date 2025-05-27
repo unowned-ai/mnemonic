@@ -42,5 +42,29 @@ CREATE TABLE IF NOT EXISTS entry_tags (
     created_at REAL DEFAULT (unixepoch()),
     PRIMARY KEY (entry_id, tag)
 );
+
+-- Full text search virtual table for entry content
+CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
+    title,
+    content,
+    entry_id UNINDEXED
+);
+
+-- Trigger to keep FTS index updated on inserts
+CREATE TRIGGER IF NOT EXISTS entries_fts_ai AFTER INSERT ON entries BEGIN
+    INSERT INTO entries_fts(rowid, title, content, entry_id)
+    VALUES (new.rowid, new.title, new.content, new.id);
+END;
+
+-- Trigger to keep FTS index updated on deletes
+CREATE TRIGGER IF NOT EXISTS entries_fts_ad AFTER DELETE ON entries BEGIN
+    DELETE FROM entries_fts WHERE rowid = old.rowid;
+END;
+
+-- Trigger to keep FTS index updated on updates
+CREATE TRIGGER IF NOT EXISTS entries_fts_au AFTER UPDATE OF title, content ON entries BEGIN
+    UPDATE entries_fts SET title = new.title, content = new.content, entry_id = new.id
+    WHERE rowid = old.rowid;
+END;
 `
 )

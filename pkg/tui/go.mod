@@ -1,6 +1,6 @@
 module github.com/unowned-ai/recall/pkg/tui
 
-go 1.24.2
+go 1.23
 
 require (
 	github.com/charmbracelet/bubbles v0.21.0
