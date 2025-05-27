@@ -18,7 +18,7 @@ func sortMatchedEntries(entries []MatchedEntry) {
 	})
 }
 
-func TestSearchEntriesByTagMatchSQL(t *testing.T) {
+func TestSearchEntries(t *testing.T) {
 	testDB, journalID := setupTestDBWithJournal(t) // Assumes setupTestDBWithJournal is available from entries_test.go or similar
 	defer testDB.Close()
 	ctx := context.Background()
@@ -44,9 +44,9 @@ func TestSearchEntriesByTagMatchSQL(t *testing.T) {
 
 	t.Run("SearchWithMultipleMatchesAndRanking", func(t *testing.T) {
 		queryTags := []string{"common", "shared"}
-		results, err := SearchEntriesByTagMatchSQL(ctx, testDB, journalID, queryTags)
+		results, err := SearchEntries(ctx, testDB, journalID, queryTags, "")
 		if err != nil {
-			t.Fatalf("SearchEntriesByTagMatchSQL failed: %v", err)
+			t.Fatalf("SearchEntries failed: %v", err)
 		}
 
 		if len(results) != 3 { // entry1, entry2 (2 matches), entry3 (1 match)
@@ -76,9 +76,9 @@ func TestSearchEntriesByTagMatchSQL(t *testing.T) {
 
 	t.Run("SearchWithSingleTagMatch", func(t *testing.T) {
 		queryTags := []string{"uniqueA"}
-		results, err := SearchEntriesByTagMatchSQL(ctx, testDB, journalID, queryTags)
+		results, err := SearchEntries(ctx, testDB, journalID, queryTags, "")
 		if err != nil {
-			t.Fatalf("SearchEntriesByTagMatchSQL failed: %v", err)
+			t.Fatalf("SearchEntries failed: %v", err)
 		}
 		if len(results) != 1 {
 			t.Fatalf("Expected 1 result, got %d", len(results))
@@ -90,9 +90,9 @@ func TestSearchEntriesByTagMatchSQL(t *testing.T) {
 
 	t.Run("SearchWithOneTagMatchingMultipleEntriesDifferently", func(t *testing.T) {
 		queryTags := []string{"common"} // common is on entry1, entry2, entry3
-		results, err := SearchEntriesByTagMatchSQL(ctx, testDB, journalID, queryTags)
+		results, err := SearchEntries(ctx, testDB, journalID, queryTags, "")
 		if err != nil {
-			t.Fatalf("SearchEntriesByTagMatchSQL failed: %v", err)
+			t.Fatalf("SearchEntries failed: %v", err)
 		}
 		if len(results) != 3 {
 			t.Fatalf("Expected 3 results, got %d. Results: %+v", len(results), results)
@@ -120,9 +120,9 @@ func TestSearchEntriesByTagMatchSQL(t *testing.T) {
 
 	t.Run("SearchWithNonExistentTag", func(t *testing.T) {
 		queryTags := []string{"nonexistenttag"}
-		results, err := SearchEntriesByTagMatchSQL(ctx, testDB, journalID, queryTags)
+		results, err := SearchEntries(ctx, testDB, journalID, queryTags, "")
 		if err != nil {
-			t.Fatalf("SearchEntriesByTagMatchSQL failed: %v", err)
+			t.Fatalf("SearchEntries failed: %v", err)
 		}
 		if len(results) != 0 {
 			t.Errorf("Expected 0 results for a non-existent tag, got %d", len(results))
@@ -131,9 +131,9 @@ func TestSearchEntriesByTagMatchSQL(t *testing.T) {
 
 	t.Run("SearchWithEmptyQueryTags", func(t *testing.T) {
 		queryTags := []string{}
-		results, err := SearchEntriesByTagMatchSQL(ctx, testDB, journalID, queryTags)
+		results, err := SearchEntries(ctx, testDB, journalID, queryTags, "")
 		if err != nil {
-			t.Fatalf("SearchEntriesByTagMatchSQL failed: %v", err)
+			t.Fatalf("SearchEntries failed: %v", err)
 		}
 		if len(results) != 0 {
 			t.Errorf("Expected 0 results for empty query tags, got %d", len(results))
@@ -150,12 +150,35 @@ func TestSearchEntriesByTagMatchSQL(t *testing.T) {
 		}
 
 		queryTags := []string{"common"}
-		results, err := SearchEntriesByTagMatchSQL(ctx, testDB, emptyJournalID, queryTags)
+		results, err := SearchEntries(ctx, testDB, emptyJournalID, queryTags, "")
 		if err != nil {
-			t.Fatalf("SearchEntriesByTagMatchSQL in empty journal failed: %v", err)
+			t.Fatalf("SearchEntries in empty journal failed: %v", err)
 		}
 		if len(results) != 0 {
 			t.Errorf("Expected 0 results when searching in an empty (but existing) journal, got %d", len(results))
 		}
 	})
+}
+
+func TestSearchEntriesFullText(t *testing.T) {
+	testDB, journalID := setupTestDBWithJournal(t)
+	defer testDB.Close()
+	ctx := context.Background()
+
+	e1 := createTestEntry(t, ctx, testDB, journalID, "Alpha note", "This entry mentions golang", "text/plain")
+	e2 := createTestEntry(t, ctx, testDB, journalID, "Beta note", "Golang is great", "text/plain")
+
+	_ = TagEntry(ctx, testDB, e1.ID, "alpha")
+	_ = TagEntry(ctx, testDB, e2.ID, "beta")
+
+	results, err := SearchEntries(ctx, testDB, journalID, []string{"beta"}, "Golang")
+	if err != nil {
+		t.Fatalf("SearchEntries full text failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(results))
+	}
+	if results[0].Entry.ID != e2.ID {
+		t.Errorf("Expected entry2, got %s", results[0].Entry.ID)
+	}
 }

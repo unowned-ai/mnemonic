@@ -13,14 +13,15 @@ import (
 
 var searchCmdJournalIDFlag string
 var searchCmdTopNFlag int // Variable for the --top flag
+var searchCmdTextFlag string
 
 var searchCmd = &cobra.Command{
 	Use:   "search [tag1 tag2...]",
-	Short: "Search entries by matching tags within a journal",
-	Long:  `Search for entries in a specified journal based on a list of query tags. Entries are ranked by the number of matching tags.`,
+	Short: "Search entries by tags or full text within a journal",
+	Long:  `Search for entries in a specified journal using tag matches and/or full text query.`,
 	Args: func(cmd *cobra.Command, args []string) error {
-		if len(args) < 1 {
-			return errors.New("requires at least one tag argument")
+		if len(args) == 0 && searchCmdTextFlag == "" {
+			return errors.New("provide tags or --text query")
 		}
 		return nil
 	},
@@ -42,7 +43,7 @@ var searchCmd = &cobra.Command{
 		}
 		defer dbConn.Close()
 
-		results, err := memories.SearchEntriesByTagMatchSQL(cmd.Context(), dbConn, journalID, queryTags)
+		results, err := memories.SearchEntries(cmd.Context(), dbConn, journalID, queryTags, searchCmdTextFlag)
 		if err != nil {
 			return fmt.Errorf("search failed: %w", err)
 		}
@@ -96,6 +97,7 @@ func initSearchCmd() {
 		// os.Exit(1) // Or handle more gracefully depending on desired startup behavior
 	}
 	searchCmd.Flags().IntVar(&searchCmdTopNFlag, "top", 0, "Return only the top N results (0 means all)")
+	searchCmd.Flags().StringVar(&searchCmdTextFlag, "text", "", "Full text search query")
 	// No dbPath, walMode, syncMode flags here as they are persistent flags on a parent command (e.g. root or journalsCmd)
 	// and use the package-level variables from journals.go or main.go
 }
