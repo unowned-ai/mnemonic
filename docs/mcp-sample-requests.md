@@ -22,8 +22,15 @@ Expected result:
 	"result": { "type": "text", "content": "pong_recall" }
 }
 ```
-
+[{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_journal","arguments":{"name":"work","description":"Work notes"}}},{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"create_entry","arguments":{"journal_name":"work","entry_title":"todo-monday","content":"finish the report","tags":"tasks,urgent"}}},{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"list_entries","arguments":{"journal_name":"work"}}}]
 ---
+
+
+## list tools
+
+```jsonc
+{"jsonrpc": "2.0","id": 1,"method": "tools/list"}
+```
 
 ## End-to-end happy path
 
