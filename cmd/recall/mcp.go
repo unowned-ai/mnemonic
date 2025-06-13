@@ -43,6 +43,13 @@ Example (Server with Memory Aware Tool active):
 		db := srv.DB()
 		s := srv.MCPRawServer()
 
+		// Conditionally register the memory overview tool
+		if memoryAware {
+			// This function will be created in pkg/mcp/
+			mcp.RegisterMemoryOverviewTool(s, db)
+			fmt.Fprintf(os.Stderr, "Memory Overview tool ('get_memory_overview') is active.\n")
+		}
+
 		mcp.RegisterPingTool(s)
 		mcp.RegisterCreateJournalTool(s, db)
 		mcp.RegisterListJournalsTool(s, db)
@@ -58,13 +65,6 @@ Example (Server with Memory Aware Tool active):
 		mcp.RegisterManageEntryTagsTool(s, db)
 		mcp.RegisterListTagsTool(s, db)
 		mcp.RegisterSearchEntriesTool(s, db)
-
-		// Conditionally register the memory overview tool
-		if memoryAware {
-			// This function will be created in pkg/mcp/
-			mcp.RegisterMemoryOverviewTool(s, db)
-			fmt.Fprintf(os.Stderr, "Memory Overview tool ('get_memory_overview') is active.\n")
-		}
 
 		// Log to stderr so we don't contaminate the JSON-RPC stream on stdout.
 		fmt.Fprintf(os.Stderr, "Recall MCP server started. DB: %s (WAL: %t, Sync: %s)\n", srv.DbPath, walMode, syncMode)
